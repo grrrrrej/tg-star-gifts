@@ -57,24 +57,26 @@
 ```bash
 pkg update && pkg upgrade
 pkg install python git
-pip install git+https://github.com/grrrrrej/tg-star-gifts.git
-tg-gifts
+curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
+chmod +x setup.sh
+./setup.sh
 ```
 
 ### 🍎 Для iOS (iSH / a-Shell)
 
-**iSH** и **a-Shell** используют Alpine Linux в качестве основы. Выполните:
+**iSH** и **a-Shell** используют Alpine Linux. Выполните:
 
 ```bash
 apk update && apk upgrade
-apk add python3 py3-pip git
-pip install git+https://github.com/grrrrrej/tg-star-gifts.git
-tg-gifts
+apk add python3 py3-pip git curl
+curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
+chmod +x setup.sh
+./setup.sh
 ```
 
 #### ⚡ Установка в одну строку (iOS):
 ```bash
-apk add python3 py3-pip git && pip install git+https://github.com/grrrrrej/tg-star-gifts.git && tg-gifts
+apk add python3 py3-pip git curl && curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 > **💡 Важно для iOS:**  
@@ -82,51 +84,49 @@ apk add python3 py3-pip git && pip install git+https://github.com/grrrrrej/tg-st
 
 ### 🪟 Для Windows (CMD / PowerShell / WSL)
 
-**Вариант 1: Через командную строку (если установлен Python)**
-```cmd
-pip install git+https://github.com/grrrrrej/tg-star-gifts.git
-tg-gifts
+**Вариант 1: Через WSL (рекомендуется)**
+```bash
+sudo apt update && sudo apt install python3 python3-pip git curl
+curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
+chmod +x setup.sh
+./setup.sh
 ```
 
-**Вариант 2: Через WSL (рекомендуется)**
-```bash
-sudo apt update && sudo apt install python3 python3-pip git
-pip install git+https://github.com/grrrrrej/tg-star-gifts.git
-tg-gifts
+**Вариант 2: Через командную строку (если установлен Python и Git)**
+```cmd
+curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
+python setup.sh
 ```
 
 ### 🐧 Для Linux (Ubuntu/Debian)
 
 ```bash
-sudo apt update && sudo apt install python3 python3-pip git
-pip install git+https://github.com/grrrrrej/tg-star-gifts.git
-tg-gifts
+sudo apt update && sudo apt install python3 python3-pip git curl
+curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
+chmod +x setup.sh
+./setup.sh
 ```
 
 ---
 
-## 🛠 Удобный менеджер (install.sh)
+## 🛠 Удобный менеджер (setup.sh)
 
-Для удобства установки, обновления и управления скриптом мы подготовили **менеджер** с красивым интерфейсом.
-
-### Скачать и запустить менеджер:
+После скачивания `setup.sh` вы получите красивое меню для управления скриптом:
 
 ```bash
-curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/install.sh
-chmod +x install.sh
-./install.sh
+./setup.sh
 ```
 
 ### Меню менеджера:
 
 | Опция | Действие |
 | :--- | :--- |
-| **1** | 🚀 Установить / обновить скрипт |
+| **1** | 🚀 Установить / Обновить зависимости |
 | **2** | ▶️ Запустить скрипт |
-| **3** | 🔄 Обновить до последней версии |
+| **3** | 🔄 Обновить из GitHub |
 | **4** | 🗑 Удалить скрипт и данные |
 | **5** | ℹ️ Информация о версии |
-| **6** | 📂 Открыть папку с данными |
+| **6** | 📂 Показать текущую папку |
 | **7** | 🚪 Выход |
 
 ---
@@ -146,15 +146,15 @@ chmod +x install.sh
 
 ## 🔄 Обновление
 
-### Быстрое обновление через pip:
+### Через менеджер (рекомендуется):
 ```bash
-pip install --upgrade git+https://github.com/grrrrrej/tg-star-gifts.git
+./setup.sh
+# Выберите опцию 1 или 3
 ```
 
-### Или через менеджер:
+### Или напрямую через pip:
 ```bash
-./install.sh
-# Выберите опцию 3
+pip install --upgrade git+https://github.com/grrrrrej/tg-star-gifts.git
 ```
 
 ---
@@ -179,13 +179,19 @@ pip install --upgrade git+https://github.com/grrrrrej/tg-star-gifts.git
 ## ❓ Частые вопросы (FAQ)
 
 ### ❓ Скрипт не запускается: "command not found: tg-gifts"
-**Решение:** Установите скрипт заново через `pip install` или перезапустите терминал.
+**Решение:** Установите скрипт через менеджер (опция 1) или перезапустите терминал.
 
 ### ❓ Ошибка: "pip: command not found"
 **Решение:** Установите pip:
 - **Termux:** `pkg install python`
 - **iOS:** `apk add py3-pip`
 - **Linux:** `sudo apt install python3-pip`
+
+### ❓ Ошибка: "curl: command not found"
+**Решение:** Установите curl:
+- **Termux:** `pkg install curl`
+- **iOS:** `apk add curl`
+- **Linux:** `sudo apt install curl`
 
 ### ❓ Медленно работает на iOS
 **Решение:** iSH эмулирует Linux, поэтому скорость ниже. Просто подождите дольше при установке и отправке.
@@ -214,4 +220,4 @@ pip install --upgrade git+https://github.com/grrrrrej/tg-star-gifts.git
 ---
 
 *Developed with ❤️ for Telegram community.*  
-*© 2024 @blackpean | GNU GPL v3.0 | Commercial use prohibited*
+*© 2025 @blackpean | GNU GPL v3.0 | Commercial use prohibited*
