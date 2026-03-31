@@ -20,7 +20,7 @@ DEVICE = "HP Laptop 15-da0xxx"
 SYS_VER = "Windows 11 x64"
 APP_VER = "6.5.1 x64"
 
-# Защищенный идентификатор автора
+# Идентификатор автора
 ID_KEY = "40626c61636b7065616e" 
 
 def get_author():
@@ -67,15 +67,13 @@ async def get_balance(client):
     except: return 0
 
 async def main():
-    # ПРОВЕРКА АВТОРСТВА
     if get_author() != "@blackpean":
         clear()
-        console.print("[bold red]❌ КРИТИЧЕСКАЯ ОШИБКА: ЛИЦЕНЗИЯ ПОВРЕЖДЕНА[/bold red]")
-        console.print("[white]Изменение авторских прав запрещено. Работа скрипта остановлена.[/white]")
+        console.print("[bold red]❌ ОШИБКА ЛИЦЕНЗИИ[/bold red]")
         return
 
     clear()
-    console.print("[bold magenta]Запуск системы (Windows 11 Mode)...[/bold magenta]")
+    console.print("[bold magenta]Вход в систему...[/bold magenta]")
     
     session_str = ""
     if os.path.exists(SESSION_FILE):
@@ -84,8 +82,7 @@ async def main():
 
     client = TelegramClient(
         StringSession(session_str), API_ID, API_HASH,
-        device_model=DEVICE, system_version=SYS_VER, app_version=APP_VER,
-        lang_code="ru", system_lang_code="ru-RU"
+        device_model=DEVICE, system_version=SYS_VER, app_version=APP_VER
     )
     
     await client.connect()
@@ -102,9 +99,13 @@ async def main():
         console.print(f"[bold cyan]│[/bold cyan] 👤 Имя: [bold]{me.first_name}[/bold]")
         console.print(f"[bold cyan]│[/bold cyan] 💎 Баланс: [bold yellow]{balance} ⭐[/bold yellow]")
         console.print(f"[bold cyan]╰──────────────────────────────────────────╯[/bold cyan]")
+        console.print("[dim]Нажми Enter (пустое поле) для выхода в терминал[/dim]\n")
 
+        # ВЫХОД ТУТ: Если нажал Enter без текста
         recipient = console.input("[bold white]👤 Кому (Юзернейм/ID): [/bold white]").strip()
-        if not recipient: continue
+        if not recipient:
+            console.print("[bold yellow]🚀 Выход в терминал...[/bold yellow]")
+            break
 
         clear()
         all_gifts = load_custom_gifts()
@@ -112,9 +113,10 @@ async def main():
         for k, v in all_gifts.items():
             console.print(f"[bold yellow]│[/bold yellow] {k}. {v['name']}")
         console.print(f"[bold yellow]╰──────────────────────────────────────────╯[/bold yellow]")
-        console.print("[dim]Добавить: /set [ID] [Название][/dim]\n")
+        console.print("[dim]Добавить: /set [ID] [Название] | Enter для отмены[/dim]\n")
         
-        choice = console.input("[bold white]🔢 Номер или /set: [/bold white]").strip()
+        choice = console.input("[bold white]🔢 Номер: [/bold white]").strip()
+        if not choice: continue
 
         if choice.startswith("/set"):
             try:
@@ -127,26 +129,19 @@ async def main():
         gift = all_gifts.get(choice)
         if not gift: continue
 
-        qty_in = console.input("[bold white]🔢 Количество (Enter=1): [/bold white]").strip()
+        qty_in = console.input("[bold white]🔢 Кол-во (Enter=1): [/bold white]").strip()
         qty = int(qty_in) if qty_in.isdigit() else 1
         is_anon = console.input("[bold white]❓ Анонимно? (да/нет): [/bold white]").lower() in ['да', 'y', '1']
-        comment = console.input("[bold white]💬 Сообщение (Enter - нет): [/bold white]").strip() or None if not is_anon else None
+        comment = None
+        if not is_anon:
+            comment = console.input("[bold white]💬 Сообщение (Enter=нет): [/bold white]").strip() or None
 
         clear()
         total = qty * GIFT_PRICE
-        dev_info = f" dev: {get_author()} "
-        dashes = "─" * (42 - len(dev_info))
-        
-        console.print(f"[bold green]╭──────────────── ПРОВЕРКА ────────────────╮[/bold green]")
-        console.print(f"[bold green]│[/bold green] 📍 Кому:      [bold]{recipient}[/bold]")
-        console.print(f"[bold green]│[/bold green] 🎁 Подарок:   [bold]{gift['name']}[/bold]")
-        console.print(f"[bold green]│[/bold green] 🔢 Кол-во:    [bold]{qty}[/bold]")
-        console.print(f"[bold green]│[/bold green] 💰 Сумма:      [bold yellow]{total} ⭐[/bold yellow]")
-        console.print(f"[bold green]│[/bold green] 👤 Режим:      [bold]{'Анонимно' if is_anon else 'Открыто'}[/bold]")
-        console.print(f"[bold green]╰{dashes}{dev_info}╯[/bold green]")
+        console.print(f"[bold green]Сумма к оплате: {total} ⭐[/bold green]")
 
         if balance < total:
-            console.input(f"\n[red]Недостаточно звезд ({balance}/{total}). Enter...[/red]"); continue
+            console.input(f"\n[red]Недостаточно звезд! Нажми Enter...[/red]"); continue
 
         if console.input("\n🚀 Отправить? (да/нет): ").lower() in ['да', 'y']:
             for i in range(qty):
@@ -154,8 +149,7 @@ async def main():
                 try:
                     peer = await client.get_input_entity(recipient)
                     inv = types.InputInvoiceStarGift(
-                        peer=peer, 
-                        gift_id=gift['id'], 
+                        peer=peer, gift_id=gift['id'], 
                         hide_name=is_anon, 
                         message=types.TextWithEntities(text=comment, entities=[]) if comment else None
                     )
@@ -166,17 +160,15 @@ async def main():
                     console.print(f"\n[red]Ошибка: {e}[/red]"); break
             console.print("\n\n[bold green]✅ ГОТОВО![/bold green]"); await asyncio.sleep(2)
 
-        if console.input("\nВыйти? (да/нет): ").lower() in ['да', 'y']: break
     await client.disconnect()
 
-# --- ТОЧКА ВХОДА ДЛЯ PIP ---
 def run():
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        console.print(f"[bold red]Ошибка запуска: {e}[/bold red]")
+        print(f"Ошибка: {e}")
 
 if __name__ == "__main__":
     run()
