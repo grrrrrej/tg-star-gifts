@@ -101,10 +101,8 @@ async def main():
         console.print(f"[bold cyan]╰──────────────────────────────────────────╯[/bold cyan]")
         console.print("[dim]Нажми Enter (пустое поле) для выхода в терминал[/dim]\n")
 
-        # ВЫХОД ТУТ: Если нажал Enter без текста
         recipient = console.input("[bold white]👤 Кому (Юзернейм/ID): [/bold white]").strip()
         if not recipient:
-            console.print("[bold yellow]🚀 Выход в терминал...[/bold yellow]")
             break
 
         clear()
@@ -113,7 +111,6 @@ async def main():
         for k, v in all_gifts.items():
             console.print(f"[bold yellow]│[/bold yellow] {k}. {v['name']}")
         console.print(f"[bold yellow]╰──────────────────────────────────────────╯[/bold yellow]")
-        console.print("[dim]Добавить: /set [ID] [Название] | Enter для отмены[/dim]\n")
         
         choice = console.input("[bold white]🔢 Номер: [/bold white]").strip()
         if not choice: continue
@@ -132,35 +129,44 @@ async def main():
         qty_in = console.input("[bold white]🔢 Кол-во (Enter=1): [/bold white]").strip()
         qty = int(qty_in) if qty_in.isdigit() else 1
         is_anon = console.input("[bold white]❓ Анонимно? (да/нет): [/bold white]").lower() in ['да', 'y', '1']
-        comment = None
-        if not is_anon:
-            comment = console.input("[bold white]💬 Сообщение (Enter=нет): [/bold white]").strip() or None
-
+        
         clear()
         total = qty * GIFT_PRICE
-        console.print(f"[bold green]Сумма к оплате: {total} ⭐[/bold green]")
+        console.print(f"[bold green]К оплате: {total} ⭐ (Баланс: {balance} ⭐)[/bold green]")
 
+        # ПРОВЕРКА БАЛАНСА И ВЫХОД ПО ENTER
         if balance < total:
-            console.input(f"\n[red]Недостаточно звезд! Нажми Enter...[/red]"); continue
+            check = console.input(f"\n[red]Недостаточно звезд![/red]\n[bold yellow]Нажми Enter для ВЫХОДА[/bold yellow] или введи любой символ для меню: ")
+            if not check: # Если нажат просто Enter
+                break
+            else:
+                continue
 
-        if console.input("\n🚀 Отправить? (да/нет): ").lower() in ['да', 'y']:
+        if console.input("\n🚀 Отправить? (да/нет): ").lower() in ['да', 'y', '1']:
             for i in range(qty):
                 console.print(f"📡 Отправка {i+1}/{qty}...", end="\r")
                 try:
                     peer = await client.get_input_entity(recipient)
                     inv = types.InputInvoiceStarGift(
                         peer=peer, gift_id=gift['id'], 
-                        hide_name=is_anon, 
-                        message=types.TextWithEntities(text=comment, entities=[]) if comment else None
+                        hide_name=is_anon
                     )
                     form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                     await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
                     if qty > 1: await asyncio.sleep(2.5)
                 except Exception as e:
                     console.print(f"\n[red]Ошибка: {e}[/red]"); break
-            console.print("\n\n[bold green]✅ ГОТОВО![/bold green]"); await asyncio.sleep(2)
+            
+            console.print("\n\n[bold green]✅ ГОТОВО![/bold green]")
+            
+            # ЗАВЕРШЕНИЕ ПОСЛЕ ОТПРАВКИ
+            last_check = console.input("\n[bold yellow]Нажми Enter для ВЫХОДА[/bold yellow] или любой символ для меню: ")
+            if not last_check:
+                break
 
     await client.disconnect()
+    clear()
+    console.print("[bold yellow]👋 Скрипт завершен. Возврат в терминал...[/bold yellow]")
 
 def run():
     try:
