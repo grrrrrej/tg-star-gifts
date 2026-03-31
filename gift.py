@@ -1,19 +1,7 @@
 import asyncio
 import sys
 import os
-import subprocess
 import json
-
-# --- АВТО-УСТАНОВКА ---
-def install_dependencies():
-    for lib in ["telethon", "rich"]:
-        try:
-            __import__(lib)
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", lib, "--quiet"])
-
-install_dependencies()
-
 from telethon import TelegramClient, functions, types
 from telethon.sessions import StringSession
 from rich.console import Console
@@ -32,7 +20,7 @@ DEVICE = "HP Laptop 15-da0xxx"
 SYS_VER = "Windows 11 x64"
 APP_VER = "6.5.1 x64"
 
-# Защищенный идентификатор автора (не удалять)
+# Защищенный идентификатор автора
 ID_KEY = "40626c61636b7065616e" 
 
 def get_author():
@@ -59,8 +47,10 @@ def load_custom_gifts():
 def save_custom_gift(gift_id, name):
     current_custom = {}
     if os.path.exists(CUSTOM_GIFTS_FILE):
-        with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
-            current_custom = json.load(f)
+        try:
+            with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
+                current_custom = json.load(f)
+        except: pass
     idx = str(len(default_gifts) + len(current_custom) + 1)
     current_custom[idx] = {"name": name, "id": int(gift_id)}
     with open(CUSTOM_GIFTS_FILE, "w", encoding="utf-8") as f:
@@ -148,11 +138,11 @@ async def main():
         dashes = "─" * (42 - len(dev_info))
         
         console.print(f"[bold green]╭──────────────── ПРОВЕРКА ────────────────╮[/bold green]")
-        console.print(f"[bold green]│[/bold green] 📍 Кому:     [bold]{recipient}[/bold]")
-        console.print(f"[bold green]│[/bold green] 🎁 Подарок:  [bold]{gift['name']}[/bold]")
+        console.print(f"[bold green]│[/bold green] 📍 Кому:      [bold]{recipient}[/bold]")
+        console.print(f"[bold green]│[/bold green] 🎁 Подарок:   [bold]{gift['name']}[/bold]")
         console.print(f"[bold green]│[/bold green] 🔢 Кол-во:    [bold]{qty}[/bold]")
-        console.print(f"[bold green]│[/bold green] 💰 Сумма:     [bold yellow]{total} ⭐[/bold yellow]")
-        console.print(f"[bold green]│[/bold green] 👤 Режим:     [bold]{'Анонимно' if is_anon else 'Открыто'}[/bold]")
+        console.print(f"[bold green]│[/bold green] 💰 Сумма:      [bold yellow]{total} ⭐[/bold yellow]")
+        console.print(f"[bold green]│[/bold green] 👤 Режим:      [bold]{'Анонимно' if is_anon else 'Открыто'}[/bold]")
         console.print(f"[bold green]╰{dashes}{dev_info}╯[/bold green]")
 
         if balance < total:
@@ -163,7 +153,12 @@ async def main():
                 console.print(f"📡 Отправка {i+1}/{qty}...", end="\r")
                 try:
                     peer = await client.get_input_entity(recipient)
-                    inv = types.InputInvoiceStarGift(peer=peer, gift_id=gift['id'], hide_name=is_anon, message=types.TextWithEntities(text=comment, entities=[]) if comment else None)
+                    inv = types.InputInvoiceStarGift(
+                        peer=peer, 
+                        gift_id=gift['id'], 
+                        hide_name=is_anon, 
+                        message=types.TextWithEntities(text=comment, entities=[]) if comment else None
+                    )
                     form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                     await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
                     if qty > 1: await asyncio.sleep(2.5)
@@ -174,6 +169,14 @@ async def main():
         if console.input("\nВыйти? (да/нет): ").lower() in ['да', 'y']: break
     await client.disconnect()
 
+# --- ТОЧКА ВХОДА ДЛЯ PIP ---
+def run():
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        console.print(f"[bold red]Ошибка запуска: {e}[/bold red]")
+
 if __name__ == "__main__":
-    try: asyncio.run(main())
-    except: sys.exit()
+    run()
