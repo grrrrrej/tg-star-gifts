@@ -50,13 +50,13 @@
 
 ---
 
-## 🚀 Установка и запуск
+## 🚀 Быстрая установка
 
 ### 📱 Для Android (Termux)
 
 ```bash
 pkg update && pkg upgrade
-pkg install python git
+pkg install python git curl
 curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
 chmod +x setup.sh
 ./setup.sh
@@ -64,7 +64,7 @@ chmod +x setup.sh
 
 ### 🍎 Для iOS (iSH / a-Shell)
 
-**iSH** и **a-Shell** используют Alpine Linux. Выполните:
+**iSH** — это эмулятор Linux для iPhone и iPad. Выполните:
 
 ```bash
 apk update && apk upgrade
@@ -79,23 +79,13 @@ chmod +x setup.sh
 apk add python3 py3-pip git curl && curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
-> **💡 Важно для iOS:**  
-> iSH работает медленнее обычного терминала. Если при установке библиотек (`pip install`) кажется, что всё зависло — просто подождите пару минут, процесс завершится.
+### 🪟 Для Windows (WSL — рекомендуется)
 
-### 🪟 Для Windows (CMD / PowerShell / WSL)
-
-**Вариант 1: Через WSL (рекомендуется)**
 ```bash
 sudo apt update && sudo apt install python3 python3-pip git curl
 curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
 chmod +x setup.sh
 ./setup.sh
-```
-
-**Вариант 2: Через командную строку (если установлен Python и Git)**
-```cmd
-curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
-python setup.sh
 ```
 
 ### 🐧 Для Linux (Ubuntu/Debian)
@@ -128,6 +118,53 @@ chmod +x setup.sh
 | **5** | ℹ️ Информация о версии |
 | **6** | 📂 Показать текущую папку |
 | **7** | 🚪 Выход |
+
+---
+
+## 🍎 Подробная инструкция для iOS (iSH / a-Shell)
+
+### Шаг 1: Установка iSH
+1. Скачайте **iSH Shell** из App Store
+2. Откройте приложение
+
+### Шаг 2: Подготовка системы (выполняется один раз)
+```bash
+apk update && apk upgrade
+apk add python3 py3-pip git curl
+```
+
+### Шаг 3: Скачивание менеджера
+```bash
+curl -O https://raw.githubusercontent.com/grrrrrej/tg-star-gifts/main/setup.sh
+chmod +x setup.sh
+```
+
+### Шаг 4: Запуск менеджера
+```bash
+./setup.sh
+```
+
+### Шаг 5: Установка скрипта
+1. В меню выберите **1** (Установить / Обновить зависимости)
+2. Дождитесь завершения установки (2-3 минуты)
+3. Выберите **2** для запуска
+
+### 💡 Важные советы для iOS:
+- **Медленная работа:** iSH эмулирует Linux, поэтому установка может занять 2-3 минуты. Не закрывайте приложение, просто подождите.
+- **Фоновая работа:** iSH не работает в фоне. Держите приложение открытым во время отправки подарков.
+- **Копирование текста:** Чтобы вставить команду в iSH, зажмите палец в окне терминала и выберите "Paste".
+- **Хранение данных:** Файлы `session.txt` и `custom_gifts.txt` сохраняются в папке iSH. Чтобы их найти, используйте опцию **6** в менеджере.
+
+### ❓ Проблемы на iOS и их решение
+
+| Проблема | Решение |
+|----------|---------|
+| `apk: command not found` | Вы не в iSH. Убедитесь, что используете приложение iSH Shell |
+| `curl: command not found` | Выполните: `apk add curl` |
+| `python3: command not found` | Выполните: `apk add python3 py3-pip` |
+| Установка зависла | Подождите 3-5 минут. iSH работает медленно, это нормально |
+| Не вставляется текст | Зажмите палец в терминале → "Paste" |
+| Скрипт не видит сессию | Файлы сохраняются в той папке, откуда запущен `setup.sh`. Используйте опцию **6** в меню, чтобы проверить |
 
 ---
 
