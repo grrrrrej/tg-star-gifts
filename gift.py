@@ -107,7 +107,7 @@ async def main_logic():
         me = await client.get_me()
         balance = await get_balance(client)
         
-        # Красивая и стабильная панель
+        # Информационная панель с фиксированной шириной (width=50)
         info_content = (
             f"👤 [bold white]Аккаунт:[/bold white] [cyan]{me.first_name}[/cyan]\n"
             f"💎 [bold white]Баланс:[/bold white] [yellow]{balance} ⭐[/yellow]\n"
@@ -119,32 +119,34 @@ async def main_logic():
             title="[bold magenta]Telegram Star Gifts[/bold magenta]",
             border_style="magenta",
             box=box.ROUNDED,
-            expand=False # Чтобы рамка не растягивалась на весь экран и не ехала
+            width=50 # Фиксируем длину рамки
         ))
 
-        recipient = console.input("\n[bold white]🎯 Кому (Ник/ID) или [red]Enter[/red] для выхода: [/bold white]").strip()
+        recipient = console.input("\n[bold white]🎯 Кому (Ник/ID): [/bold white]").strip()
         if not recipient: 
-            console.print("[bold red]Выход в консоль...[/bold red]")
             await client.disconnect()
-            sys.exit(0) # Жесткий выход в консоль
+            sys.exit(0)
 
         while True:
             clear()
             all_gifts = load_all_gifts()
             
-            table = Table(box=box.ROUNDED, border_style="cyan", header_style="bold cyan")
+            # Таблица подарков
+            table = Table(box=box.ROUNDED, border_style="cyan", header_style="bold cyan", width=48)
             table.add_column("№", justify="center")
             table.add_column("Название", justify="left")
-            table.add_column("ID Подарка", justify="right", style="dim")
+            table.add_column("ID", justify="right", style="dim")
 
             for k, v in all_gifts.items():
                 table.add_row(k, v['name'], str(v['id']))
             
-            console.print(Panel(table, title="🎁 Доступные подарки", border_style="cyan", expand=False))
+            console.print(Panel(table, title="🎁 Подарки", border_style="cyan", width=50))
             
             console.print(Panel(
-                "[magenta]➕ /set [ID] [Имя][/magenta] | [red]❌ /unset [№][/red]\n[white]Пусто = Назад к выбору цели[/white]",
-                box=box.ROUNDED, border_style="dim", expand=False
+                "[magenta]➕ /set [ID] [Имя][/magenta]\n"
+                "[red]❌ /unset [№][/red]\n"
+                "[white]Пусто = Назад к выбору цели[/white]",
+                box=box.ROUNDED, border_style="dim", width=50
             ))
             
             choice = console.input("\n[bold cyan]Выберите № или команду: [/bold cyan]").strip()
@@ -182,7 +184,7 @@ async def main_logic():
                         if qty > 1: await asyncio.sleep(1.5)
                 except Exception as e:
                     console.print(f"[red]Ошибка: {e}[/red]")
-                Prompt.ask("\nНажмите Enter, чтобы продолжить")
+                Prompt.ask("\nНажмите Enter")
             break
 
 def run():
