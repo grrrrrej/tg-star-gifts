@@ -14,4 +14,4 @@ dependencies = [
 ]
 
 [project.scripts]
-tg-gifts = "gift:run"
+tg-gifts = "gift:main"
