@@ -158,6 +158,12 @@ async def main_logic():
             qty = int(qty_str) if qty_str.isdigit() else 1
             is_anon = Prompt.ask("[bold white]Анонимно?[/bold white]", choices=["да", "нет"], default="нет") == "да"
             
+            # Добавляем комментарий, если не анонимно
+            gift_comment = None
+            if not is_anon:
+                gift_comment = console.input("[bold white]💬 Сообщение (пусто = без него): [/bold white]").strip()
+                if not gift_comment: gift_comment = None
+            
             # --- ЭТАП ПОДТВЕРЖДЕНИЯ ---
             clear()
             confirm_info = (
@@ -165,8 +171,12 @@ async def main_logic():
                 f"🎁 [bold white]Подарок:[/bold white] [yellow]{gift['name']}[/yellow]\n"
                 f"📦 [bold white]Количество:[/bold white] [green]{qty} шт.[/green]\n"
                 f"🕶️ [bold white]Анонимно:[/bold white] {'[green]Да[/green]' if is_anon else '[red]Нет[/red]'}\n"
-                f"💰 [bold white]Итого:[/bold white] [yellow]{qty * 50} ⭐[/yellow]"
             )
+            if gift_comment:
+                confirm_info += f"💬 [bold white]Текст:[/bold white] [dim]{gift_comment}[/dim]\n"
+            
+            confirm_info += f"💰 [bold white]Итого:[/bold white] [yellow]{qty * 50} ⭐[/yellow]"
+            
             console.print(Panel(confirm_info, title="[bold red]ПОДТВЕРЖДЕНИЕ[/bold red]", border_style="red", box=box.DOUBLE, width=50))
             
             if Prompt.ask("\n🚀 Отправить?", choices=["да", "нет"], default="да") == "да":
@@ -179,7 +189,13 @@ async def main_logic():
                         peer = await client.get_input_entity(recipient)
                         for i in range(qty):
                             try:
-                                inv = types.InputInvoiceStarGift(peer=peer, gift_id=gift['id'], hide_name=is_anon)
+                                # Передаем комментарий в message
+                                inv = types.InputInvoiceStarGift(
+                                    peer=peer, 
+                                    gift_id=gift['id'], 
+                                    hide_name=is_anon,
+                                    message=gift_comment if gift_comment else None
+                                )
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
                                 sent_count += 1
