@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tg-star-gifts"
-version = "1.1.0"
+version = "1.1.5"
 description = "Скрипт для отправки Star Gifts в Telegram"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -14,4 +14,4 @@ dependencies = [
 ]
 
 [project.scripts]
-tg-gifts = "gift:main"
+tg-gifts = "gift:run"
