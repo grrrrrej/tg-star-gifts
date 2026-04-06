@@ -2,7 +2,7 @@ import asyncio
 import sys
 import os
 import json
-from telethon import TelegramClient, functions, types, errors
+from telethon import TelegramClient, functions, types
 from telethon.sessions import StringSession
 from rich.console import Console
 from rich.table import Table
@@ -29,8 +29,7 @@ default_gifts = {
     "3": {"name": "❤️ Валентинка", "id": 5801108895304779062},
     "4": {"name": "🧸 Мишка 14 февраля", "id": 5800655655995968830},
     "5": {"name": "🌸 Мишка 8 марта", "id": 5866352046986232958},
-    "6": {"name": "🍀 Мишка Патрик", "id": 5893356958802511476},
-    "7": {"name": "🤡 Мишка Клоун", "id": 5935895822435615926}
+    "6": {"name": "🍀 Мишка Патрик", "id": 5893356958802511476}
 }
 
 def load_all_gifts():
@@ -39,8 +38,10 @@ def load_all_gifts():
         try:
             with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
                 custom = json.load(f)
-                for i, v in enumerate(custom.values(), start=len(default_gifts)+1):
-                    gifts[str(i)] = v
+                start_idx = len(default_gifts) + 1
+                for v in custom.values():
+                    gifts[str(start_idx)] = v
+                    start_idx += 1
         except: pass
     return gifts
 
@@ -58,7 +59,8 @@ async def main_logic():
 
     session_str = ""
     if os.path.exists(SESSION_FILE):
-        with open(SESSION_FILE, "r") as f: session_str = f.read().strip()
+        with open(SESSION_FILE, "r") as f:
+            session_str = f.read().strip()
 
     client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
     await client.connect()
@@ -87,101 +89,45 @@ async def main_logic():
         while True:
             clear()
             all_gifts = load_all_gifts()
+            
             table = Table(box=box.ROUNDED, border_style="cyan", header_style="bold cyan", width=48)
             table.add_column("№", justify="center")
             table.add_column("Название", justify="left")
-            for k, v in all_gifts.items(): table.add_row(k, v['name'])
+
+            for k, v in all_gifts.items():
+                table.add_row(k, v['name'])
             
             console.print(Panel(table, title="🎁 Подарки", border_style="cyan", width=50))
-            choice = console.input("\n[bold cyan]Выберите № (Enter - Назад): [/bold cyan]").strip()
+            
+            choice = console.input("\n[bold cyan]Выберите №: [/bold cyan]").strip()
             if not choice: break
 
             gift = all_gifts.get(choice)
             if not gift: continue
             
-            clear()
-            console.print(Panel(f"[bold yellow]Настройка:[/bold yellow] {gift['name']}", border_style="yellow", width=50, box=box.ROUNDED))
-            qty_str = Prompt.ask("[bold white]Кол-во[/bold white]", default="1")
-            qty = int(qty_str) if qty_str.isdigit() else 1
+            # Настройка
+            qty = int(Prompt.ask("[bold white]Кол-во[/bold white]", default="1"))
             is_anon = Prompt.ask("[bold white]Анонимно?[/bold white]", choices=["да", "нет"], default="нет") == "да"
             
-            gift_comment = None
-            if not is_anon:
-                gift_comment = console.input("[bold white]💬 Сообщение (Enter = нет): [/bold white]").strip()
-            
-            clear()
-            confirm_info = (
-                f"👤 [bold white]Кому:[/bold white] [cyan]{recipient}[/cyan]\n"
-                f"🎁 [bold white]Подарок:[/bold white] [yellow]{gift['name']}[/yellow]\n"
-                f"📦 [bold white]Количество:[/bold white] [green]{qty} шт.[/green]\n"
-                f"🕶️ [bold white]Анонимно:[/bold white] {'[green]Да[/green]' if is_anon else '[red]Нет[/red]'}\n"
-                f"💰 [bold white]Итого:[/bold white] [yellow]{qty * 50} ⭐[/yellow]"
-            )
-            console.print(Panel(confirm_info, title="[bold red]ПОДТВЕРЖДЕНИЕ[/bold red]", border_style="red", box=box.DOUBLE, width=50))
-            
             if Prompt.ask("\n🚀 Отправить?", choices=["да", "нет"], default="да") == "да":
-                clear()
                 sent_count = 0
-                errors_list = []
-                
-                with console.status("[bold green]Обработка цели...") as status:
-                    try:
-                        # Фикс TLObject: получаем полную информацию о пользователе
-                        user = await client.get_entity(recipient)
-                        input_peer = await client.get_input_entity(user)
-                        
-                        i = 0
-                        while i < qty:
-                            try:
-                                status.update(f"[bold green]Отправка {i+1} из {qty}...")
-                                
-                                # Важно: используем явный InputPeer
-                                inv = types.InputInvoiceStarGift(
-                                    peer=input_peer, 
-                                    gift_id=gift['id'], 
-                                    hide_name=is_anon, 
-                                    message=gift_comment if gift_comment else None
-                                )
-                                
-                                # Запрос формы
-                                form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
-                                
-                                # Оплата
-                                await client(functions.payments.SendStarsFormRequest(
-                                    form_id=form.form_id, 
-                                    invoice=inv
-                                ))
-                                
-                                sent_count += 1
-                                i += 1
-                                if i < qty:
-                                    await asyncio.sleep(3.5) # Пауза для стабильности в iSH
-                                    
-                            except errors.FloodWaitError as e:
-                                status.update(f"[bold yellow]Flood: ждем {e.seconds} сек...")
-                                await asyncio.sleep(e.seconds + 1)
-                            except Exception as e:
-                                errors_list.append(str(e))
-                                i += 1
-                                
-                    except Exception as e:
-                        errors_list.append(f"Ошибка: {str(e)}")
+                try:
+                    peer = await client.get_input_entity(recipient)
+                    for i in range(qty):
+                        inv = types.InputInvoiceStarGift(peer=peer, gift_id=gift['id'], hide_name=is_anon)
+                        form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
+                        await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
+                        sent_count += 1
+                        await asyncio.sleep(1)
+                except Exception as e:
+                    console.print(f"[red]Ошибка: {e}[/red]")
 
-                clear()
-                res = Table(title="📊 Итог операции", box=box.ROUNDED, border_style="green", width=50)
-                res.add_column("Параметр"); res.add_column("Значение")
-                res.add_row("Получатель", recipient)
-                res.add_row("Результат", f"[bold green]{sent_count} из {qty} успешно[/bold green]")
-                if errors_list:
-                    res.add_row("Заметка", f"[red]{errors_list[-1][:40]}[/red]")
-                
-                console.print(res)
-                Prompt.ask("\n[bold yellow]Нажмите Enter для выхода[/bold yellow]")
+                console.print(f"[green]Успешно отправлено: {sent_count}[/green]")
+                Prompt.ask("\n[yellow]Нажмите Enter[/yellow]")
             break
 
 def run():
-    try: asyncio.run(main_logic())
-    except (KeyboardInterrupt, SystemExit): pass
+    asyncio.run(main_logic())
 
 if __name__ == "__main__":
     run()
