@@ -2,7 +2,8 @@ import asyncio
 import sys
 import os
 import json
-from telethon import TelegramClient, functions, types
+import re
+from telethon import TelegramClient, functions, types, errors
 from telethon.sessions import StringSession
 from rich.console import Console
 from rich.table import Table
@@ -29,7 +30,8 @@ default_gifts = {
     "3": {"name": "❤️ Валентинка", "id": 5801108895304779062},
     "4": {"name": "🧸 Мишка 14 февраля", "id": 5800655655995968830},
     "5": {"name": "🌸 Мишка 8 марта", "id": 5866352046986232958},
-    "6": {"name": "🍀 Мишка Патрик", "id": 5893356958802511476}
+    "6": {"name": "🍀 Мишка Патрик", "id": 5893356958802511476},
+    "7": {"name": "🤡 Мишка Клоун", "id": 5935895822435615926}
 }
 
 def load_all_gifts():
@@ -38,42 +40,10 @@ def load_all_gifts():
         try:
             with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
                 custom = json.load(f)
-                start_idx = len(default_gifts) + 1
-                for v in custom.values():
-                    gifts[str(start_idx)] = v
-                    start_idx += 1
+                for i, v in enumerate(custom.values(), start=len(default_gifts)+1):
+                    gifts[str(i)] = v
         except: pass
     return gifts
-
-def save_custom_gift(gift_id, name):
-    custom_data = {}
-    if os.path.exists(CUSTOM_GIFTS_FILE):
-        try:
-            with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
-                custom_data = json.load(f)
-        except: pass
-    new_idx = str(len(custom_data) + 1)
-    custom_data[new_idx] = {"name": name, "id": int(gift_id)}
-    with open(CUSTOM_GIFTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(custom_data, f, ensure_ascii=False, indent=4)
-
-def delete_custom_gift(choice_idx):
-    if not os.path.exists(CUSTOM_GIFTS_FILE): return False, "Список пуст"
-    try:
-        idx = int(choice_idx)
-        if idx <= len(default_gifts): return False, "Стандартные нельзя удалить"
-        with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        items = list(data.values())
-        real_idx = idx - len(default_gifts) - 1
-        if 0 <= real_idx < len(items):
-            items.pop(real_idx)
-            new_data = {str(i+1): v for i, v in enumerate(items)}
-            with open(CUSTOM_GIFTS_FILE, "w", encoding="utf-8") as f:
-                json.dump(new_data, f, ensure_ascii=False, indent=4)
-            return True, "Удалено"
-        return False, "Не найден"
-    except: return False, "Ошибка"
 
 def clear(): os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -89,8 +59,7 @@ async def main_logic():
 
     session_str = ""
     if os.path.exists(SESSION_FILE):
-        with open(SESSION_FILE, "r") as f:
-            session_str = f.read().strip()
+        with open(SESSION_FILE, "r") as f: session_str = f.read().strip()
 
     client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
     await client.connect()
@@ -119,110 +88,95 @@ async def main_logic():
         while True:
             clear()
             all_gifts = load_all_gifts()
-            
             table = Table(box=box.ROUNDED, border_style="cyan", header_style="bold cyan", width=48)
             table.add_column("№", justify="center")
             table.add_column("Название", justify="left")
             table.add_column("ID", justify="right", style="dim")
-
-            for k, v in all_gifts.items():
-                table.add_row(k, v['name'], str(v['id']))
+            for k, v in all_gifts.items(): table.add_row(k, v['name'], str(v['id']))
             
             console.print(Panel(table, title="🎁 Подарки", border_style="cyan", width=50))
-            console.print(Panel("[magenta]➕ /set [ID] [Имя][/magenta] | [red]❌ /unset [№][/red]\n[white]Пусто = Назад[/white]", box=box.ROUNDED, width=50))
+            console.print(Panel("[white]Выберите № подарка (Enter - Назад)[/white]", box=box.ROUNDED, width=50, border_style="dim"))
             
-            choice = console.input("\n[bold cyan]Выберите № или команду: [/bold cyan]").strip()
+            choice = console.input("\n[bold cyan]Выберите №: [/bold cyan]").strip()
             if not choice: break
-
-            if choice.startswith("/set"):
-                try:
-                    p = choice.split(" ", 2)
-                    save_custom_gift(p[1], p[2])
-                    continue
-                except: continue
-
-            if choice.startswith("/unset"):
-                try:
-                    ok, msg = delete_custom_gift(choice.split(" ")[1])
-                    console.print(f"[{'green' if ok else 'red'}] {msg}[/]")
-                    await asyncio.sleep(1); continue
-                except: continue
 
             gift = all_gifts.get(choice)
             if not gift: continue
             
-            # --- ЭТАП НАСТРОЙКИ ---
             clear()
             console.print(Panel(f"[bold yellow]Настройка:[/bold yellow] {gift['name']}", border_style="yellow", width=50, box=box.ROUNDED))
             qty_str = Prompt.ask("[bold white]Кол-во[/bold white]", default="1")
             qty = int(qty_str) if qty_str.isdigit() else 1
             is_anon = Prompt.ask("[bold white]Анонимно?[/bold white]", choices=["да", "нет"], default="нет") == "да"
             
-            # Добавляем комментарий, если не анонимно
             gift_comment = None
             if not is_anon:
-                gift_comment = console.input("[bold white]💬 Сообщение (пусто = без него): [/bold white]").strip()
-                if not gift_comment: gift_comment = None
+                gift_comment = console.input("[bold white]💬 Сообщение (Enter = нет): [/bold white]").strip()
             
-            # --- ЭТАП ПОДТВЕРЖДЕНИЯ ---
             clear()
             confirm_info = (
                 f"👤 [bold white]Кому:[/bold white] [cyan]{recipient}[/cyan]\n"
                 f"🎁 [bold white]Подарок:[/bold white] [yellow]{gift['name']}[/yellow]\n"
                 f"📦 [bold white]Количество:[/bold white] [green]{qty} шт.[/green]\n"
-                f"🕶️ [bold white]Анонимно:[/bold white] {'[green]Да[/green]' if is_anon else '[red]Нет[/red]'}\n"
+                f"🕶️ [bold white]Анонимно:[/bold white] {'[green]Да[/green]' if is_anon else '[red]Нет[/red]'}"
             )
-            if gift_comment:
-                confirm_info += f"💬 [bold white]Текст:[/bold white] [dim]{gift_comment}[/dim]\n"
-            
-            confirm_info += f"💰 [bold white]Итого:[/bold white] [yellow]{qty * 50} ⭐[/yellow]"
+            if gift_comment: confirm_info += f"\n💬 [bold white]Текст:[/bold white] [dim]{gift_comment}[/dim]"
+            confirm_info += f"\n💰 [bold white]Итого:[/bold white] [yellow]{qty * 50} ⭐[/yellow]"
             
             console.print(Panel(confirm_info, title="[bold red]ПОДТВЕРЖДЕНИЕ[/bold red]", border_style="red", box=box.DOUBLE, width=50))
             
             if Prompt.ask("\n🚀 Отправить?", choices=["да", "нет"], default="да") == "да":
                 clear()
                 sent_count = 0
-                errors = []
+                errors_list = []
                 
-                with console.status("[bold green]Отправка подарков...") as status:
+                with console.status("[bold green]Работаю...") as status:
                     try:
                         peer = await client.get_input_entity(recipient)
-                        for i in range(qty):
+                        i = 0
+                        while i < qty:
                             try:
-                                # Передаем комментарий в message
+                                status.update(f"[bold green]Отправка {i+1} из {qty}...")
                                 inv = types.InputInvoiceStarGift(
                                     peer=peer, 
                                     gift_id=gift['id'], 
-                                    hide_name=is_anon,
+                                    hide_name=is_anon, 
                                     message=gift_comment if gift_comment else None
                                 )
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
+                                
                                 sent_count += 1
-                                if qty > i+1: await asyncio.sleep(1.5)
+                                i += 1
+                                if i < qty:
+                                    await asyncio.sleep(2.5) # Пауза для мобильной стабильности
+                                    
+                            except errors.FloodWaitError as e:
+                                status.update(f"[bold yellow]FloodWait: ждем {e.seconds} сек...")
+                                await asyncio.sleep(e.seconds + 1)
+                                # Не увеличиваем i, пробуем этот же подарок снова
                             except Exception as e:
-                                errors.append(str(e))
-                                break
+                                errors_list.append(str(e))
+                                i += 1 # Пропускаем проблемный подарок и идем дальше
+                                
                     except Exception as e:
-                        errors.append(str(e))
+                        errors_list.append(f"Ошибка доступа: {str(e)}")
 
-                # --- ФИНАЛЬНЫЙ ИТОГ ---
                 clear()
-                result_table = Table(title="📊 Итог операции", box=box.ROUNDED, border_style="green", width=50)
-                result_table.add_column("Параметр", style="cyan")
-                result_table.add_column("Значение", style="white")
-                result_table.add_row("Получатель", recipient)
-                result_table.add_row("Подарок", gift['name'])
-                result_table.add_row("Статус", f"[bold green]{sent_count} из {qty} успешно[/bold green]")
-                if errors: result_table.add_row("Ошибка", f"[red]{errors[0]}[/red]")
+                res = Table(title="📊 Итог операции", box=box.ROUNDED, border_style="green", width=50)
+                res.add_column("Параметр"); res.add_column("Значение")
+                res.add_row("Получатель", recipient)
+                res.add_row("Подарок", gift['name'])
+                res.add_row("Результат", f"[bold green]{sent_count} из {qty} успешно[/bold green]")
+                if errors_list:
+                    res.add_row("Заметки", f"[red]{errors_list[-1][:40]}...[/red]")
                 
-                console.print(result_table)
-                Prompt.ask("\n[bold yellow]Нажмите Enter для возврата[/bold yellow]")
+                console.print(res)
+                Prompt.ask("\n[bold yellow]Нажмите Enter[/bold yellow]")
             break
 
 def run():
-    try:
-        asyncio.run(main_logic())
+    try: asyncio.run(main_logic())
     except (KeyboardInterrupt, SystemExit): pass
 
 if __name__ == "__main__":
