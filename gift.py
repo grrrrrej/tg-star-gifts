@@ -90,13 +90,10 @@ async def main_logic():
             table = Table(box=box.ROUNDED, border_style="cyan", header_style="bold cyan", width=48)
             table.add_column("№", justify="center")
             table.add_column("Название", justify="left")
-            table.add_column("ID", justify="right", style="dim")
-            for k, v in all_gifts.items(): table.add_row(k, v['name'], str(v['id']))
+            for k, v in all_gifts.items(): table.add_row(k, v['name'])
             
             console.print(Panel(table, title="🎁 Подарки", border_style="cyan", width=50))
-            console.print(Panel("[white]Выберите № (Enter - Назад)[/white]", box=box.ROUNDED, width=50, border_style="dim"))
-            
-            choice = console.input("\n[bold cyan]Выберите №: [/bold cyan]").strip()
+            choice = console.input("\n[bold cyan]Выберите № (Enter - Назад): [/bold cyan]").strip()
             if not choice: break
 
             gift = all_gifts.get(choice)
@@ -111,18 +108,15 @@ async def main_logic():
             gift_comment = None
             if not is_anon:
                 gift_comment = console.input("[bold white]💬 Сообщение (Enter = нет): [/bold white]").strip()
-                if not gift_comment: gift_comment = None
             
             clear()
             confirm_info = (
                 f"👤 [bold white]Кому:[/bold white] [cyan]{recipient}[/cyan]\n"
                 f"🎁 [bold white]Подарок:[/bold white] [yellow]{gift['name']}[/yellow]\n"
                 f"📦 [bold white]Количество:[/bold white] [green]{qty} шт.[/green]\n"
-                f"🕶️ [bold white]Анонимно:[/bold white] {'[green]Да[/green]' if is_anon else '[red]Нет[/red]'}"
+                f"🕶️ [bold white]Анонимно:[/bold white] {'[green]Да[/green]' if is_anon else '[red]Нет[/red]'}\n"
+                f"💰 [bold white]Итого:[/bold white] [yellow]{qty * 50} ⭐[/yellow]"
             )
-            if gift_comment: confirm_info += f"\n💬 [bold white]Текст:[/bold white] [dim]{gift_comment}[/dim]"
-            confirm_info += f"\n💰 [bold white]Итого:[/bold white] [yellow]{qty * 50} ⭐[/yellow]"
-            
             console.print(Panel(confirm_info, title="[bold red]ПОДТВЕРЖДЕНИЕ[/bold red]", border_style="red", box=box.DOUBLE, width=50))
             
             if Prompt.ask("\n🚀 Отправить?", choices=["да", "нет"], default="да") == "да":
@@ -130,43 +124,48 @@ async def main_logic():
                 sent_count = 0
                 errors_list = []
                 
-                with console.status("[bold green]Поиск цели...") as status:
+                with console.status("[bold green]Обработка цели...") as status:
                     try:
-                        # Умное определение цели (ID или Ник)
-                        target = recipient
-                        if target.replace('-', '').isdigit():
-                            target = int(target)
-                        
-                        user_obj = await client.get_entity(target)
-                        peer = await client.get_input_entity(user_obj)
+                        # Фикс TLObject: получаем полную информацию о пользователе
+                        user = await client.get_entity(recipient)
+                        input_peer = await client.get_input_entity(user)
                         
                         i = 0
                         while i < qty:
                             try:
                                 status.update(f"[bold green]Отправка {i+1} из {qty}...")
+                                
+                                # Важно: используем явный InputPeer
                                 inv = types.InputInvoiceStarGift(
-                                    peer=peer, 
+                                    peer=input_peer, 
                                     gift_id=gift['id'], 
                                     hide_name=is_anon, 
-                                    message=gift_comment
+                                    message=gift_comment if gift_comment else None
                                 )
+                                
+                                # Запрос формы
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
-                                await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
+                                
+                                # Оплата
+                                await client(functions.payments.SendStarsFormRequest(
+                                    form_id=form.form_id, 
+                                    invoice=inv
+                                ))
                                 
                                 sent_count += 1
                                 i += 1
                                 if i < qty:
-                                    await asyncio.sleep(3.0) 
+                                    await asyncio.sleep(3.5) # Пауза для стабильности в iSH
                                     
                             except errors.FloodWaitError as e:
-                                status.update(f"[bold yellow]FloodWait: ждем {e.seconds} сек...")
+                                status.update(f"[bold yellow]Flood: ждем {e.seconds} сек...")
                                 await asyncio.sleep(e.seconds + 1)
                             except Exception as e:
                                 errors_list.append(str(e))
                                 i += 1
                                 
                     except Exception as e:
-                        errors_list.append(f"Не найден: {str(e)}")
+                        errors_list.append(f"Ошибка: {str(e)}")
 
                 clear()
                 res = Table(title="📊 Итог операции", box=box.ROUNDED, border_style="green", width=50)
@@ -174,11 +173,7 @@ async def main_logic():
                 res.add_row("Получатель", recipient)
                 res.add_row("Результат", f"[bold green]{sent_count} из {qty} успешно[/bold green]")
                 if errors_list:
-                    # Показываем только суть ошибки
-                    err_msg = errors_list[-1]
-                    if "entity" in err_msg.lower():
-                        err_msg = "ID не найден в базе. Напишите ему в ЛС первым."
-                    res.add_row("Заметка", f"[red]{err_msg[:40]}[/red]")
+                    res.add_row("Заметка", f"[red]{errors_list[-1][:40]}[/red]")
                 
                 console.print(res)
                 Prompt.ask("\n[bold yellow]Нажмите Enter для выхода[/bold yellow]")
