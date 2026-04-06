@@ -2,7 +2,6 @@ import asyncio
 import sys
 import os
 import json
-import re
 from telethon import TelegramClient, functions, types, errors
 from telethon.sessions import StringSession
 from rich.console import Console
@@ -95,7 +94,7 @@ async def main_logic():
             for k, v in all_gifts.items(): table.add_row(k, v['name'], str(v['id']))
             
             console.print(Panel(table, title="🎁 Подарки", border_style="cyan", width=50))
-            console.print(Panel("[white]Выберите № подарка (Enter - Назад)[/white]", box=box.ROUNDED, width=50, border_style="dim"))
+            console.print(Panel("[white]Выберите № (Enter - Назад)[/white]", box=box.ROUNDED, width=50, border_style="dim"))
             
             choice = console.input("\n[bold cyan]Выберите №: [/bold cyan]").strip()
             if not choice: break
@@ -112,6 +111,7 @@ async def main_logic():
             gift_comment = None
             if not is_anon:
                 gift_comment = console.input("[bold white]💬 Сообщение (Enter = нет): [/bold white]").strip()
+                if not gift_comment: gift_comment = None
             
             clear()
             confirm_info = (
@@ -130,9 +130,16 @@ async def main_logic():
                 sent_count = 0
                 errors_list = []
                 
-                with console.status("[bold green]Работаю...") as status:
+                with console.status("[bold green]Поиск цели...") as status:
                     try:
-                        peer = await client.get_input_entity(recipient)
+                        # Умное определение цели (ID или Ник)
+                        target = recipient
+                        if target.replace('-', '').isdigit():
+                            target = int(target)
+                        
+                        user_obj = await client.get_entity(target)
+                        peer = await client.get_input_entity(user_obj)
+                        
                         i = 0
                         while i < qty:
                             try:
@@ -141,7 +148,7 @@ async def main_logic():
                                     peer=peer, 
                                     gift_id=gift['id'], 
                                     hide_name=is_anon, 
-                                    message=gift_comment if gift_comment else None
+                                    message=gift_comment
                                 )
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
@@ -149,30 +156,32 @@ async def main_logic():
                                 sent_count += 1
                                 i += 1
                                 if i < qty:
-                                    await asyncio.sleep(2.5) # Пауза для мобильной стабильности
+                                    await asyncio.sleep(3.0) 
                                     
                             except errors.FloodWaitError as e:
                                 status.update(f"[bold yellow]FloodWait: ждем {e.seconds} сек...")
                                 await asyncio.sleep(e.seconds + 1)
-                                # Не увеличиваем i, пробуем этот же подарок снова
                             except Exception as e:
                                 errors_list.append(str(e))
-                                i += 1 # Пропускаем проблемный подарок и идем дальше
+                                i += 1
                                 
                     except Exception as e:
-                        errors_list.append(f"Ошибка доступа: {str(e)}")
+                        errors_list.append(f"Не найден: {str(e)}")
 
                 clear()
                 res = Table(title="📊 Итог операции", box=box.ROUNDED, border_style="green", width=50)
                 res.add_column("Параметр"); res.add_column("Значение")
                 res.add_row("Получатель", recipient)
-                res.add_row("Подарок", gift['name'])
                 res.add_row("Результат", f"[bold green]{sent_count} из {qty} успешно[/bold green]")
                 if errors_list:
-                    res.add_row("Заметки", f"[red]{errors_list[-1][:40]}...[/red]")
+                    # Показываем только суть ошибки
+                    err_msg = errors_list[-1]
+                    if "entity" in err_msg.lower():
+                        err_msg = "ID не найден в базе. Напишите ему в ЛС первым."
+                    res.add_row("Заметка", f"[red]{err_msg[:40]}[/red]")
                 
                 console.print(res)
-                Prompt.ask("\n[bold yellow]Нажмите Enter[/bold yellow]")
+                Prompt.ask("\n[bold yellow]Нажмите Enter для выхода[/bold yellow]")
             break
 
 def run():
