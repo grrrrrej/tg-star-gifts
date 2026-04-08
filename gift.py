@@ -16,7 +16,6 @@ console = Console()
 API_ID = 2040
 API_HASH = "b18441a1ff607e10a989891a5462e627"
 SESSION_FILE = "session.txt"
-CUSTOM_GIFTS_FILE = "custom_gifts.txt"
 ID_KEY = "40626c61636b7065616e"
 
 def get_author():
@@ -32,19 +31,6 @@ default_gifts = {
     "6": {"name": "🍀 Мишка Патрик", "id": 5893356958802511476}
 }
 
-def load_all_gifts():
-    gifts = default_gifts.copy()
-    if os.path.exists(CUSTOM_GIFTS_FILE):
-        try:
-            with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
-                custom = json.load(f)
-                start_idx = len(default_gifts) + 1
-                for v in custom.values():
-                    gifts[str(start_idx)] = v
-                    start_idx += 1
-        except: pass
-    return gifts
-
 def clear(): os.system('cls' if os.name == 'nt' else 'clear')
 
 async def get_balance(client):
@@ -59,8 +45,7 @@ async def main_logic():
 
     session_str = ""
     if os.path.exists(SESSION_FILE):
-        with open(SESSION_FILE, "r") as f:
-            session_str = f.read().strip()
+        with open(SESSION_FILE, "r") as f: session_str = f.read().strip()
 
     client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
     await client.connect()
@@ -82,27 +67,29 @@ async def main_logic():
         ))
 
         recipient = console.input("\n[bold white]🎯 Кому (Ник/ID): [/bold white]").strip()
-        if not recipient: 
-            await client.disconnect()
-            sys.exit(0)
+        if not recipient: break
 
         while True:
             clear()
-            all_gifts = load_all_gifts()
             table = Table(box=box.ROUNDED, border_style="cyan", header_style="bold cyan", width=48)
             table.add_column("№", justify="center")
             table.add_column("Название", justify="left")
-            for k, v in all_gifts.items():
-                table.add_row(k, v['name'])
+            for k, v in default_gifts.items(): table.add_row(k, v['name'])
             
-            console.print(Panel(table, title="🎁 Подарки", border_style="cyan", width=50))
-            choice = console.input("\n[bold cyan]Выберите №: [/bold cyan]").strip()
+            console.print(Panel(table, title="🎁 Выберите подарок", border_style="cyan", width=50))
+            choice = console.input("\n[bold cyan]Выберите № (Enter - Назад): [/bold cyan]").strip()
             if not choice: break
 
-            gift = all_gifts.get(choice)
+            gift = default_gifts.get(choice)
             if not gift: continue
             
+            # --- ПАНЕЛЬ ПЕРЕД КОЛ-ВОМ ---
             clear()
+            status_info = f"👤 [bold white]Цель:[/bold white] [cyan]{recipient}[/cyan]\n" \
+                          f"🎁 [bold white]Подарок:[/bold white] [yellow]{gift['name']}[/yellow]\n" \
+                          f"💎 [bold white]Ваш баланс:[/bold white] [yellow]{balance} ⭐[/yellow]"
+            console.print(Panel(status_info, title="[bold yellow]Настройка[/bold yellow]", border_style="yellow", width=50))
+            
             qty_str = Prompt.ask("[bold white]Кол-во[/bold white]", default="1")
             qty = int(qty_str) if qty_str.isdigit() else 1
             is_anon = Prompt.ask("[bold white]Анонимно?[/bold white]", choices=["да", "нет"], default="нет") == "да"
@@ -111,13 +98,28 @@ async def main_logic():
             if not is_anon:
                 gift_comment = console.input("[bold white]💬 Сообщение (пусто = без него): [/bold white]").strip()
                 if not gift_comment: gift_comment = None
+
+            # --- ТАБЛИЦА ПОДТВЕРЖДЕНИЯ ---
+            clear()
+            conf_table = Table(box=box.ROUNDED, border_style="red", width=50, show_header=False)
+            conf_table.add_row("[bold white]Кому:[/bold white]", f"[cyan]{recipient}[/cyan]")
+            conf_table.add_row("[bold white]Подарок:[/bold white]", f"[yellow]{gift['name']}[/yellow]")
+            conf_table.add_row("[bold white]Количество:[/bold white]", f"[green]{qty} шт.[/green]")
+            conf_table.add_row("[bold white]Анонимно:[/bold white]", "[green]Да[/green]" if is_anon else "[red]Нет[/red]")
+            
+            if not is_anon and gift_comment:
+                conf_table.add_row("[bold white]Сообщение:[/bold white]", f"[dim]{gift_comment}[/dim]")
+            
+            conf_table.add_row("[bold white]Итого к оплате:[/bold white]", f"[bold yellow]{qty * 50} ⭐[/bold yellow]")
+            
+            console.print(Panel(conf_table, title="[bold red]ПОДТВЕРЖДЕНИЕ[/bold red]", border_style="red", box=box.DOUBLE, width=50))
             
             if Prompt.ask("\n🚀 Отправить?", choices=["да", "нет"], default="да") == "да":
                 clear()
                 sent_count = 0
                 error_list = []
                 
-                with console.status("[bold green]Отправка...") as status:
+                with console.status("[bold green]Запуск процесса...") as status:
                     try:
                         target = recipient
                         if target.replace('-', '').isdigit(): target = int(target)
@@ -128,16 +130,16 @@ async def main_logic():
                         for i in range(qty):
                             try:
                                 status.update(f"[bold green]Отправка {i+1} из {qty}...")
-                                # ФИКС: Передаем None если комментария нет или анонимно
-                                msg_payload = gift_comment if (gift_comment and not is_anon) else None
+                                # ФИКС: Явный None для API
+                                final_msg = gift_comment if (gift_comment and not is_anon) else None
 
                                 inv = types.InputInvoiceStarGift(
-                                    peer=peer, gift_id=gift['id'], hide_name=is_anon, message=msg_payload
+                                    peer=peer, gift_id=gift['id'], hide_name=is_anon, message=final_msg
                                 )
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
                                 sent_count += 1
-                                if qty > i+1: await asyncio.sleep(4.0)
+                                if qty > i+1: await asyncio.sleep(3.5)
                             except Exception as e:
                                 error_list.append(str(e))
                                 break
@@ -149,19 +151,20 @@ async def main_logic():
                 res = Table(title="📊 Итог операции", box=box.ROUNDED, border_style="green", width=50)
                 res.add_column("Параметр", style="cyan")
                 res.add_column("Значение", style="white")
-                res.add_row("Получатель", recipient)
+                res.add_row("Получатель", f"{recipient}")
                 res.add_row("Результат", f"[bold green]{sent_count} из {qty} успешно[/bold green]")
                 res.add_row("Анонимно", "Да" if is_anon else "Нет")
                 
-                # Показываем комм, только если он есть и не анонимно
                 if not is_anon and gift_comment:
-                    res.add_row("Комментарий", gift_comment)
+                    res.add_row("Сообщение", gift_comment)
                 
                 if error_list: res.add_row("Ошибка", f"[red]{error_list[0][:40]}[/red]")
                 
                 console.print(res)
-                Prompt.ask("\n[bold yellow]Нажмите Enter[/bold yellow]")
+                Prompt.ask("\n[bold yellow]Нажмите Enter для выхода в меню[/bold yellow]")
             break
+
+    await client.disconnect()
 
 def run():
     try: asyncio.run(main_logic())
