@@ -183,7 +183,7 @@ async def main_logic():
                 
                 with console.status("[bold green]Обработка цели...") as status:
                     try:
-                        # Умное определение цели (Фикс ID и TLObject)
+                        # Фикс ID и TLObject
                         target = recipient
                         if target.replace('-', '').isdigit(): target = int(target)
                         
@@ -193,16 +193,21 @@ async def main_logic():
                         for i in range(qty):
                             try:
                                 status.update(f"[bold green]Отправка {i+1} из {qty}...")
+                                
+                                # ГЛАВНЫЙ ФИКС: Явное указание комментария или None
+                                # Telegram не принимает пустые строки в invoice
+                                msg_payload = gift_comment if (gift_comment and not is_anon) else None
+
                                 inv = types.InputInvoiceStarGift(
                                     peer=peer, 
                                     gift_id=gift['id'], 
                                     hide_name=is_anon,
-                                    message=gift_comment
+                                    message=msg_payload
                                 )
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
                                 sent_count += 1
-                                if qty > i+1: await asyncio.sleep(3.5)
+                                if qty > i+1: await asyncio.sleep(4.0)
                             except errors.FloodWaitError as e:
                                 await asyncio.sleep(e.seconds + 1)
                             except Exception as e:
