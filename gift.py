@@ -102,7 +102,9 @@ async def main_logic():
             gift = all_gifts.get(choice)
             if not gift: continue
             
+            # --- ШАГ 1: НАСТРОЙКИ ---
             clear()
+            console.print(Panel(f"[bold yellow]Настройка:[/bold yellow] {gift['name']}", border_style="yellow", width=50, box=box.ROUNDED))
             qty_str = Prompt.ask("[bold white]Кол-во[/bold white]", default="1")
             qty = int(qty_str) if qty_str.isdigit() else 1
             is_anon = Prompt.ask("[bold white]Анонимно?[/bold white]", choices=["да", "нет"], default="нет") == "да"
@@ -111,6 +113,19 @@ async def main_logic():
             if not is_anon:
                 gift_comment = console.input("[bold white]💬 Сообщение (пусто = без него): [/bold white]").strip()
                 if not gift_comment: gift_comment = None
+
+            # --- ШАГ 2: ПОДТВЕРЖДЕНИЕ ---
+            clear()
+            conf_table = Table(box=box.ROUNDED, border_style="red", width=50, show_header=False)
+            conf_table.add_row("[bold white]Кому:[/bold white]", f"[cyan]{recipient}[/cyan]")
+            conf_table.add_row("[bold white]Подарок:[/bold white]", f"[yellow]{gift['name']}[/yellow]")
+            conf_table.add_row("[bold white]Кол-во:[/bold white]", f"[green]{qty} шт.[/green]")
+            conf_table.add_row("[bold white]Анонимно:[/bold white]", "[green]Да[/green]" if is_anon else "[red]Нет[/red]")
+            if not is_anon and gift_comment:
+                conf_table.add_row("[bold white]Текст:[/bold white]", f"[dim]{gift_comment}[/dim]")
+            conf_table.add_row("[bold white]Итого:[/bold white]", f"[yellow]{qty * 50} ⭐[/yellow]")
+            
+            console.print(Panel(conf_table, title="[bold red]ПОДТВЕРЖДЕНИЕ[/bold red]", border_style="red", box=box.DOUBLE, width=50))
             
             if Prompt.ask("\n🚀 Отправить?", choices=["да", "нет"], default="да") == "да":
                 clear()
@@ -128,23 +143,23 @@ async def main_logic():
                         for i in range(qty):
                             try:
                                 status.update(f"[bold green]Отправка {i+1} из {qty}...")
-                                # ФИКС: Передаем None если комментария нет или анонимно
-                                msg_payload = gift_comment if (gift_comment and not is_anon) else None
+                                # ФИКС: Очистка сообщения для API
+                                final_msg = gift_comment if (gift_comment and not is_anon) else None
 
                                 inv = types.InputInvoiceStarGift(
-                                    peer=peer, gift_id=gift['id'], hide_name=is_anon, message=msg_payload
+                                    peer=peer, gift_id=gift['id'], hide_name=is_anon, message=final_msg
                                 )
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
                                 sent_count += 1
-                                if qty > i+1: await asyncio.sleep(4.0)
+                                if qty > i+1: await asyncio.sleep(3.5)
                             except Exception as e:
                                 error_list.append(str(e))
                                 break
                     except Exception as e:
                         error_list.append(str(e))
 
-                # --- ИТОГОВЫЙ ОТЧЕТ ---
+                # --- ШАГ 3: ИТОГОВЫЙ ОТЧЕТ ---
                 clear()
                 res = Table(title="📊 Итог операции", box=box.ROUNDED, border_style="green", width=50)
                 res.add_column("Параметр", style="cyan")
@@ -153,7 +168,7 @@ async def main_logic():
                 res.add_row("Результат", f"[bold green]{sent_count} из {qty} успешно[/bold green]")
                 res.add_row("Анонимно", "Да" if is_anon else "Нет")
                 
-                # Показываем комм, только если он есть и не анонимно
+                # Показываем комм в итогах только если он реально был
                 if not is_anon and gift_comment:
                     res.add_row("Комментарий", gift_comment)
                 
