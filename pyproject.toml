@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tg-star-gifts"
-version = "1.1.5"
+version = "2.2.0"
 description = "Скрипт для отправки Star Gifts в Telegram"
 readme = "README.md"
 requires-python = ">=3.8"
