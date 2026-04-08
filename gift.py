@@ -129,6 +129,7 @@ async def main_logic():
             if not gift: continue
             
             clear()
+            # ПАНЕЛЬ ПЕРЕД ВВОДОМ КОЛ-ВА
             console.print(Panel(f"👤 [cyan]{recipient}[/cyan] | 🎁 [yellow]{gift['name']}[/yellow]\n💎 [bold white]Баланс:[/bold white] [yellow]{balance} ⭐[/yellow]", title="[bold yellow]Настройка[/bold yellow]", border_style="yellow", width=50))
             qty_str = Prompt.ask("[bold white]Кол-во[/bold white]", default="1")
             qty = int(qty_str) if qty_str.isdigit() else 1
@@ -139,6 +140,7 @@ async def main_logic():
                 if not gift_comment: gift_comment = None
 
             clear()
+            # ТАБЛИЦА ПОДТВЕРЖДЕНИЯ
             conf = Table(box=box.ROUNDED, border_style="red", width=50, show_header=False)
             conf.add_row("[bold white]Кому:[/bold white]", f"[cyan]{recipient}[/cyan]")
             conf.add_row("[bold white]Подарок:[/bold white]", f"[yellow]{gift['name']}[/yellow]")
@@ -159,25 +161,35 @@ async def main_logic():
                         for i in range(qty):
                             try:
                                 status.update(f"[bold green]Отправка {i+1}/{qty}...")
-                                inv = types.InputInvoiceStarGift(peer=peer, gift_id=gift['id'], hide_name=is_anon, message=gift_comment if (gift_comment and not is_anon) else None)
+                                # ФИКС: Передаем None если комментария нет
+                                final_msg = gift_comment if (gift_comment and not is_anon) else None
+                                inv = types.InputInvoiceStarGift(peer=peer, gift_id=gift['id'], hide_name=is_anon, message=final_msg)
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
                                 sent += 1
-                                if qty > i+1: await asyncio.sleep(4.0)
+                                if qty > i+1: await asyncio.sleep(3.5)
                             except Exception as e: errs.append(str(e)); break
                     except Exception as e: errs.append(str(e))
 
                 clear()
+                # ИТОГОВАЯ ТАБЛИЦА
                 res = Table(title="📊 Итог", box=box.ROUNDED, border_style="green", width=50)
                 res.add_column("Параметр"); res.add_column("Значение")
                 res.add_row("Получатель", f"{recipient}")
-                res.add_row("Статус", f"[bold green]{sent} из {qty} ок[/bold green]")
+                res.add_row("Статус", f"[bold green]{sent} из {qty} успешно[/bold green]")
+                res.add_row("Анонимно", "Да" if is_anon else "Нет")
                 if not is_anon and gift_comment: res.add_row("Текст", gift_comment)
                 if errs: res.add_row("Ошибка", f"[red]{errs[0][:40]}[/red]")
                 console.print(res); Prompt.ask("\n[bold yellow]Нажмите Enter[/bold yellow]")
             break
     await client.disconnect()
 
+# ЭТОТ БЛОК ОБЯЗАТЕЛЕН, ЧТОБЫ ТЕРМУКС ВИДЕЛ ФУНКЦИЮ RUN
+def run():
+    try:
+        asyncio.run(main_logic())
+    except (KeyboardInterrupt, SystemExit):
+        pass
+
 if __name__ == "__main__":
-    try: asyncio.run(main_logic())
-    except: pass
+    run()
