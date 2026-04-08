@@ -39,7 +39,7 @@ def load_all_gifts():
         try:
             with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
                 custom = json.load(f)
-                for i, (k, v) in enumerate(custom.items(), start=len(default_gifts)+1):
+                for i, v in enumerate(custom.values(), start=len(default_gifts)+1):
                     gifts[str(i)] = v
         except: pass
     return gifts
@@ -54,23 +54,6 @@ def save_custom_gift(gift_id, name):
     custom_data[new_idx] = {"name": name, "id": int(gift_id)}
     with open(CUSTOM_GIFTS_FILE, "w", encoding="utf-8") as f:
         json.dump(custom_data, f, ensure_ascii=False, indent=4)
-
-def delete_custom_gift(choice_idx):
-    if not os.path.exists(CUSTOM_GIFTS_FILE): return False, "Пусто"
-    try:
-        idx = int(choice_idx)
-        if idx <= len(default_gifts): return False, "Нельзя удалить стандарт"
-        with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f: data = json.load(f)
-        items = list(data.values())
-        real_idx = idx - len(default_gifts) - 1
-        if 0 <= real_idx < len(items):
-            items.pop(real_idx)
-            new_data = {str(i+1): v for i, v in enumerate(items)}
-            with open(CUSTOM_GIFTS_FILE, "w", encoding="utf-8") as f:
-                json.dump(new_data, f, ensure_ascii=False, indent=4)
-            return True, "Удалено"
-    except: pass
-    return False, "Ошибка"
 
 def clear(): os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -109,7 +92,7 @@ async def main_logic():
             for k, v in all_gifts.items(): table.add_row(k, v['name'], str(v['id']))
             
             console.print(Panel(table, title="🎁 Выберите подарок", border_style="cyan", width=50))
-            console.print(Panel("[magenta]➕ /set [ID] [Имя][/magenta] | [red]❌ /unset [№][/red]", box=box.ROUNDED, width=50))
+            console.print(Panel("[magenta]➕ /set [ID] [Имя][/magenta]", box=box.ROUNDED, width=50))
             
             choice = console.input("\n[bold cyan]№ или команда: [/bold cyan]").strip()
             if not choice: break
@@ -119,17 +102,12 @@ async def main_logic():
                     p = choice.split(" ", 2)
                     save_custom_gift(p[1], p[2]); continue
                 except: continue
-            if choice.startswith("/unset"):
-                try:
-                    ok, msg = delete_custom_gift(choice.split(" ")[1])
-                    console.print(f"[{'green' if ok else 'red'}] {msg}[/]"); await asyncio.sleep(1); continue
-                except: continue
 
             gift = all_gifts.get(choice)
             if not gift: continue
             
             clear()
-            # ПАНЕЛЬ ПЕРЕД ВВОДОМ КОЛ-ВА
+            # ПАНЕЛЬ ПЕРЕД КОЛ-ВОМ
             console.print(Panel(f"👤 [cyan]{recipient}[/cyan] | 🎁 [yellow]{gift['name']}[/yellow]\n💎 [bold white]Баланс:[/bold white] [yellow]{balance} ⭐[/yellow]", title="[bold yellow]Настройка[/bold yellow]", border_style="yellow", width=50))
             qty_str = Prompt.ask("[bold white]Кол-во[/bold white]", default="1")
             qty = int(qty_str) if qty_str.isdigit() else 1
@@ -158,11 +136,16 @@ async def main_logic():
                         target = int(recipient) if recipient.replace('-', '').isdigit() else recipient
                         user = await client.get_entity(target)
                         peer = await client.get_input_entity(user)
+                        
+                        # --- КЛЮЧЕВОЙ ФИКС СООБЩЕНИЯ ---
+                        final_msg = None
+                        if gift_comment and not is_anon:
+                            # Оборачиваем текст в объект, который требует Telegram
+                            final_msg = types.TextWithEntities(text=gift_comment, entities=[])
+
                         for i in range(qty):
                             try:
                                 status.update(f"[bold green]Отправка {i+1}/{qty}...")
-                                # ФИКС: Передаем None если комментария нет
-                                final_msg = gift_comment if (gift_comment and not is_anon) else None
                                 inv = types.InputInvoiceStarGift(peer=peer, gift_id=gift['id'], hide_name=is_anon, message=final_msg)
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
@@ -179,17 +162,14 @@ async def main_logic():
                 res.add_row("Статус", f"[bold green]{sent} из {qty} успешно[/bold green]")
                 res.add_row("Анонимно", "Да" if is_anon else "Нет")
                 if not is_anon and gift_comment: res.add_row("Текст", gift_comment)
-                if errs: res.add_row("Ошибка", f"[red]{errs[0][:40]}[/red]")
+                if errs: res.add_row("Ошибка", f"[red]{errs[0][:50]}[/red]")
                 console.print(res); Prompt.ask("\n[bold yellow]Нажмите Enter[/bold yellow]")
             break
     await client.disconnect()
 
-# ЭТОТ БЛОК ОБЯЗАТЕЛЕН, ЧТОБЫ ТЕРМУКС ВИДЕЛ ФУНКЦИЮ RUN
 def run():
-    try:
-        asyncio.run(main_logic())
-    except (KeyboardInterrupt, SystemExit):
-        pass
+    try: asyncio.run(main_logic())
+    except: pass
 
 if __name__ == "__main__":
     run()
