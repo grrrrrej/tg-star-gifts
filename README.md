@@ -21,14 +21,13 @@
 - Списание Telegram Stars и любые связанные с этим финансовые потери
 - Нарушение пользовательского соглашения Telegram
 - Потеря доступа к аккаунту, сообщениям, контактам и медиафайлам
-- Привлечение к административной или иной ответственности
 - Любые иные прямые или косвенные убытки
 
 лежит **ИСКЛЮЧИТЕЛЬНО НА ПОЛЬЗОВАТЕЛЕ**.
 
 Используя данный скрипт, вы подтверждаете, что:
 
-- Вы действуете осознанно, добровольно и без принуждения
+- Вы действуете осознанно, добровольно
 - Вы полностью понимаете возможные риски, включая необратимые последствия
 - Вы не будете предъявлять претензии, иски или иные требования к автору
 - Вы ознакомились с пользовательским соглашением Telegram и не нарушаете его
@@ -74,14 +73,18 @@
 
 ## 🚀 Самый простой способ установки
 
-Просто скопируйте и вставьте эту команду в свой терминал:
+### Для Windows (подготовка):
+Установите **Git** перед установкой скрипта:
+1. Скачайте Git с официального сайта: https://git-scm.com/download/win
+2. Установите с настройками по умолчанию
+3. Перезапустите командную строку
 
+### Установка скрипта (для всех платформ):
 ```bash
 pip install git+https://github.com/grrrrrej/tg-star-gifts.git
 ```
 
 После установки запускайте командой:
-
 ```bash
 tg-gifts
 ```
@@ -90,15 +93,17 @@ tg-gifts
 
 ---
 
-## 🛠 Где запускать? (5 простых способов)
+## 🛠 Где запускать? (6 простых способов)
 
 ### 1. 💻 **VS Code** (самый удобный для Windows)
 - Скачайте [VS Code](https://code.visualstudio.com/)
+- Установите Git (ссылка выше)
 - Откройте **Терминал** (Ctrl + \` или Вид → Терминал)
 - Вставьте команду установки: `pip install git+https://github.com/grrrrrej/tg-star-gifts.git`
 - Запускайте: `tg-gifts`
 
 ### 2. 🪟 **Командная строка Windows (CMD)**
+- Установите Git (ссылка выше)
 - Нажмите `Win + R`, введите `cmd`, нажмите Enter
 - Вставьте команду установки
 - Запускайте: `tg-gifts`
@@ -110,7 +115,7 @@ tg-gifts
 
 ### 4. 📱 **Termux (Android)**
 ```bash
-pkg update && pkg install python
+pkg update && pkg install python git
 pip install git+https://github.com/grrrrrej/tg-star-gifts.git
 tg-gifts
 ```
@@ -122,7 +127,7 @@ tg-gifts
 ```bash
 # Установка Python и pip (один раз)
 apk update
-apk add python3 py3-pip
+apk add python3 py3-pip git
 
 # Установка скрипта
 pip install git+https://github.com/grrrrrej/tg-star-gifts.git
@@ -131,14 +136,14 @@ pip install git+https://github.com/grrrrrej/tg-star-gifts.git
 tg-gifts
 ```
 
-**Проблемы iSH и их решение:**
-
-| Проблема | Решение |
-|----------|---------|
-| `pip: command not found` | Выполни: `apk add py3-pip` |
-| `git: command not found` | Выполни: `apk add git` |
-| Установка зависла | Подожди 2-3 минуты, iSH медленный |
-| Не вставляется текст | Зажми палец → Paste |
+### 6. 📦 **Альтернативный способ (без Git)**
+Если не хотите устанавливать Git, скачайте ZIP-архив:
+1. Перейдите на https://github.com/grrrrrej/tg-star-gifts
+2. Нажмите **Code** → **Download ZIP**
+3. Распакуйте в любую папку
+4. В терминале перейдите в эту папку: `cd путь/к/папке`
+5. Установите: `pip install .`
+6. Запускайте: `tg-gifts`
 
 ---
 
@@ -172,6 +177,26 @@ pip install --upgrade git+https://github.com/grrrrrej/tg-star-gifts.git
 
 ## ❓ Частые вопросы (FAQ)
 
+### ❌ ОШИБКА: `Cannot find command 'git'` (Windows)
+
+**Проблема:** Git не установлен или не добавлен в PATH.
+
+**Решение:**
+
+**Способ 1 — Установить Git:**
+1. Скачайте Git: https://git-scm.com/download/win
+2. Установите с настройками по умолчанию
+3. **Перезапустите командную строку**
+4. Снова выполните: `pip install git+https://github.com/grrrrrej/tg-star-gifts.git`
+
+**Способ 2 — Скачать ZIP-архив (без Git):**
+1. Перейдите на https://github.com/grrrrrej/tg-star-gifts
+2. Нажмите **Code** → **Download ZIP**
+3. Распакуйте архив
+4. В командной строке перейдите в папку: `cd C:\путь\к\распакованной\папке`
+5. Установите: `pip install .`
+6. Запускайте: `tg-gifts`
+
 ### ❓ `tg-gifts` не найден после установки?
 **Решение:** Перезапустите терминал или выполните:
 ```bash
@@ -204,4 +229,4 @@ python -c "from tg_gifts import main; main()"
 
 ---
 
-*© 2025 @blackpean | GNU GPL v3.0 | Commercial use prohibited*
+*© 2026 @blackpean | GNU GPL v3.0 | Commercial use prohibited*
