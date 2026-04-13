@@ -16,45 +16,35 @@ console = Console()
 API_ID = 2040
 API_HASH = "b18441a1ff607e10a989891a5462e627"
 SESSION_FILE = "session.txt"
-CUSTOM_GIFTS_FILE = "custom_gifts.txt"
+GIFTS_DB = "gifts_base.json"
 ID_KEY = "40626c61636b7065616e"
 
 def get_author():
     try: return bytes.fromhex(ID_KEY).decode()
     except: return ""
 
-# СПИСОК: ОТ ЕЛКИ ДО КЛОУНА
-default_gifts = {
-    "1": {"name": "🎄 Елка", "id": 5922558454332916696},
-    "2": {"name": "🎄 Новогодний мишка", "id": 5956217000635139069},
-    "3": {"name": "❤️ Сердце валентинка", "id": 5801108895304779062},
-    "4": {"name": "🧸 Мишка 14 февраля", "id": 5800655655995968830},
-    "5": {"name": "🌸 Мишка 8 марта", "id": 5866352046986232958},
-    "6": {"name": "🍀 Мишка Патрик", "id": 5893356958802511476},
-    "7": {"name": "🤡 Клоун", "id": 5935895822435615975}
-}
+init_gifts = [
+    {"name": "🎄 Елка", "id": 5922558454332916696},
+    {"name": "🎄 Новогодний мишка", "id": 5956217000635139069},
+    {"name": "❤️ Сердце валентинка", "id": 5801108895304779062},
+    {"name": "🧸 Мишка 14 февраля", "id": 5800655655995968830},
+    {"name": "🌸 Мишка 8 марта", "id": 5866352046986232958},
+    {"name": "🍀 Мишка Патрик", "id": 5893356958802511476},
+    {"name": "🤡 Клоун", "id": 5935895822435615975}
+]
 
-def load_all_gifts():
-    gifts = default_gifts.copy()
-    if os.path.exists(CUSTOM_GIFTS_FILE):
-        try:
-            with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f:
-                custom = json.load(f)
-                for i, v in enumerate(custom.values(), start=len(default_gifts)+1):
-                    gifts[str(i)] = v
-        except: pass
-    return gifts
+def load_db():
+    if not os.path.exists(GIFTS_DB):
+        with open(GIFTS_DB, "w", encoding="utf-8") as f:
+            json.dump(init_gifts, f, ensure_ascii=False, indent=4)
+        return init_gifts
+    try:
+        with open(GIFTS_DB, "r", encoding="utf-8") as f: return json.load(f)
+    except: return init_gifts
 
-def save_custom_gift(gift_id, name):
-    custom_data = {}
-    if os.path.exists(CUSTOM_GIFTS_FILE):
-        try:
-            with open(CUSTOM_GIFTS_FILE, "r", encoding="utf-8") as f: custom_data = json.load(f)
-        except: pass
-    new_idx = str(len(custom_data) + 1)
-    custom_data[new_idx] = {"name": name, "id": int(gift_id)}
-    with open(CUSTOM_GIFTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(custom_data, f, ensure_ascii=False, indent=4)
+def save_db(data):
+    with open(GIFTS_DB, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 def clear(): os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -83,95 +73,108 @@ async def main_logic():
         clear()
         me = await client.get_me()
         balance = await get_balance(client)
-        # Увеличил ширину панели для баланса
         console.print(Panel(f"👤 [bold white]Аккаунт:[/bold white] [cyan]{me.first_name}[/cyan]\n💎 [bold white]Баланс:[/bold white] [yellow]{balance} ⭐[/yellow]\n👨‍💻 [bold white]Dev:[/bold white] [green]{dev_name}[/green]", title="[bold magenta]Telegram Star Gifts[/bold magenta]", border_style="magenta", box=box.ROUNDED, width=60))
 
-        recipient = console.input("\n[bold white]🎯 Кому (Ник/ID): [/bold white]").strip()
-        if not recipient: break
+        # НОВАЯ ПОДСКАЗКА ДЛЯ МАССОВОЙ РАССЫЛКИ
+        raw_recipients = console.input("\n[bold white]🎯 Кому (через запятую для рассылки): [/bold white]").strip()
+        if not raw_recipients: break
+        
+        # Парсим список получателей
+        recipients = [r.strip() for r in raw_recipients.split(",") if r.strip()]
 
         while True:
             clear()
-            all_gifts = load_all_gifts()
-            # ТУТ ИСПРАВЛЕНА ТАБЛИЦА (width=60 и четкие колонки)
+            current_gifts = load_db()
             table = Table(box=box.ROUNDED, border_style="cyan", header_style="bold cyan", width=60, expand=True)
-            table.add_column("№", justify="center", width=4, no_wrap=True)
-            table.add_column("Название", justify="left", no_wrap=True)
-            table.add_column("ID", justify="right", style="dim", width=22, no_wrap=True)
+            table.add_column("№", justify="center", width=4)
+            table.add_column("Название", justify="left")
+            table.add_column("ID", justify="right", style="dim", width=22)
             
-            for k, v in all_gifts.items():
-                table.add_row(k, v['name'], str(v['id']))
+            for i, v in enumerate(current_gifts, 1):
+                table.add_row(str(i), v['name'], str(v['id']))
             
             console.print(Panel(table, title="🎁 Выберите подарок", border_style="cyan", width=60))
-            console.print(Panel("[bold magenta]➕ /set [ID] [Имя][/bold magenta]", box=box.ROUNDED, border_style="magenta", width=60))
+            console.print(Panel("[bold magenta]➕ /set [ID] [Имя][/bold magenta]  [bold red]❌ /unset [№][/bold red]", box=box.ROUNDED, border_style="magenta", width=60))
             
-            choice = console.input("\n[bold cyan]Выберите №: [/bold cyan]").strip()
+            choice = console.input("\n[bold cyan]Команда или №: [/bold cyan]").strip()
             if not choice: break
 
             if choice.startswith("/set"):
                 try:
                     p = choice.split(" ", 2)
-                    save_custom_gift(p[1], p[2]); continue
+                    current_gifts.append({"name": p[2], "id": int(p[1])})
+                    save_db(current_gifts); continue
+                except: continue
+            
+            if choice.startswith("/unset"):
+                try:
+                    idx = int(choice.split(" ")[1]) - 1
+                    if 0 <= idx < len(current_gifts):
+                        current_gifts.pop(idx)
+                        save_db(current_gifts)
+                    continue
                 except: continue
 
-            gift = all_gifts.get(choice)
-            if not gift: continue
+            try: gift = current_gifts[int(choice)-1]
+            except: continue
             
+            # --- Настройка ---
             clear()
-            console.print(Panel(f"👤 [cyan]{recipient}[/cyan] | 🎁 [yellow]{gift['name']}[/yellow]\n💎 [bold white]Баланс:[/bold white] [yellow]{balance} ⭐[/yellow]", title="[bold yellow]Настройка[/bold yellow]", border_style="yellow", width=60))
+            is_mass = len(recipients) > 1
+            rec_display = f"{recipients[0]} + {len(recipients)-1} чел." if is_mass else recipients[0]
             
-            qty_str = Prompt.ask("[bold white]Кол-во[/bold white]", default="1")
-            qty = int(qty_str) if qty_str.isdigit() else 1
+            console.print(Panel(f"🎯 [cyan]{rec_display}[/cyan] | 🎁 [yellow]{gift['name']}[/yellow]\n💎 [bold white]Баланс:[/bold white] [yellow]{balance} ⭐[/yellow]", title="[bold yellow]Настройка[/bold yellow]", border_style="yellow", width=60))
+            
+            qty = 1
+            if not is_mass:
+                qty_str = Prompt.ask("[bold white]Кол-во для этого юзера[/bold white]", default="1")
+                qty = int(qty_str) if qty_str.isdigit() else 1
+            
             is_anon = Prompt.ask("[bold white]Анонимно?[/bold white]", choices=["да", "нет"], default="нет") == "да"
+            gift_comment = console.input("[bold white]💬 Сообщение (Enter = пропустить): [/bold white]").strip() if not is_anon else None
             
-            gift_comment = None
-            if not is_anon:
-                gift_comment = console.input("[bold white]💬 Сообщение: [/bold white]").strip()
-                if not gift_comment: gift_comment = None
-
+            # --- Подтверждение ---
             clear()
+            total_stars = (qty * 50) if not is_mass else (len(recipients) * 50)
             conf = Table(box=box.ROUNDED, border_style="red", width=60, show_header=False)
-            conf.add_row("[bold white]Кому:[/bold white]", f"[cyan]{recipient}[/cyan]")
+            conf.add_row("[bold white]Получателей:[/bold white]", f"[cyan]{len(recipients)}[/cyan]")
             conf.add_row("[bold white]Подарок:[/bold white]", f"[yellow]{gift['name']}[/yellow]")
-            conf.add_row("[bold white]Количество:[/bold white]", f"[green]{qty} шт.[/green]")
-            conf.add_row("[bold white]Анонимно:[/bold white]", "[green]Да[/green]" if is_anon else "[red]Нет[/red]")
-            if not is_anon and gift_comment:
-                conf.add_row("[bold white]Сообщение:[/bold white]", f"[dim]{gift_comment}[/dim]")
-            conf.add_row("[bold white]Итого:[/bold white]", f"[bold yellow]{qty * 50} ⭐[/bold yellow]")
-            
+            conf.add_row("[bold white]Итого звёзд:[/bold white]", f"[bold yellow]{total_stars} ⭐[/bold yellow]")
             console.print(Panel(conf, title="[bold red]ПОДТВЕРЖДЕНИЕ[/bold red]", border_style="red", box=box.DOUBLE, width=60))
             
-            if Prompt.ask("\n🚀 Отправить?", choices=["да", "нет"], default="да") == "да":
+            if Prompt.ask("\n🚀 Запустить?", choices=["да", "нет"], default="да") == "да":
                 clear()
-                sent = 0; errs = []
-                with console.status("[bold green]Отправка...") as status:
-                    try:
-                        target = int(recipient) if recipient.replace('-', '').isdigit() else recipient
-                        user = await client.get_entity(target)
-                        peer = await client.get_input_entity(user)
-                        
-                        final_msg = None
-                        if gift_comment and not is_anon:
-                            final_msg = types.TextWithEntities(text=gift_comment, entities=[])
-
-                        for i in range(qty):
-                            try:
-                                status.update(f"[bold green]Отправка {i+1}/{qty}...")
+                results = []
+                with console.status("[bold green]Работаю...") as status:
+                    for target_name in recipients:
+                        try:
+                            status.update(f"[bold green]Отправка для {target_name}...")
+                            target = int(target_name) if target_name.replace('-', '').isdigit() else target_name
+                            user = await client.get_entity(target)
+                            peer = await client.get_input_entity(user)
+                            
+                            final_msg = types.TextWithEntities(text=gift_comment, entities=[]) if gift_comment else None
+                            
+                            # Если один юзер - шлем qty, если рассылка - по 1 каждому
+                            loops = qty if not is_mass else 1
+                            for _ in range(loops):
                                 inv = types.InputInvoiceStarGift(peer=peer, gift_id=gift['id'], hide_name=is_anon, message=final_msg)
                                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
                                 await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
-                                sent += 1
-                                if qty > i+1: await asyncio.sleep(4.0)
-                            except Exception as e:
-                                errs.append(str(e)); break
-                    except Exception as e: errs.append(str(e))
+                                if loops > 1 or is_mass: await asyncio.sleep(4.1)
+                            
+                            results.append((target_name, "[bold green]✅ Ок[/bold green]"))
+                        except Exception as e:
+                            results.append((target_name, f"[red]❌ {str(e)[:30]}[/red]"))
 
+                # --- Итоговая таблица рассылки ---
                 clear()
-                res = Table(title="📊 Итог", box=box.ROUNDED, border_style="green", width=60)
-                res.add_column("Параметр"); res.add_column("Значение")
-                res.add_row("Статус", f"[bold green]{sent} из {qty} успешно[/bold green]")
-                if errs: res.add_row("Ошибка", f"[red]{errs[0][:60]}[/red]")
+                res_table = Table(title="📊 Отчет по списку", box=box.ROUNDED, border_style="green", width=60)
+                res_table.add_column("Получатель"); res_table.add_column("Результат")
+                for r_name, r_status in results:
+                    res_table.add_row(r_name, r_status)
                 
-                console.print(res)
+                console.print(res_table)
                 Prompt.ask("\n[bold yellow]Нажмите Enter[/bold yellow]")
             break
     await client.disconnect()
