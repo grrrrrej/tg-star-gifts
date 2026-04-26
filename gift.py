@@ -1,16 +1,8 @@
 import asyncio
-import sys
 import os
 import json
-from telethon import TelegramClient, functions, types, errors
+from telethon import TelegramClient, events, functions, types, Button
 from telethon.sessions import StringSession
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.prompt import Prompt
-from rich import box
-
-console = Console()
 
 # --- КОНФИГУРАЦИЯ ---
 API_ID = 2040
@@ -23,13 +15,14 @@ def get_author():
     try: return bytes.fromhex(ID_KEY).decode()
     except: return ""
 
+# Базовый список
 init_gifts = [
     {"name": "🎄 Елка", "id": 5922558454332916696},
     {"name": "🎄 Новогодний мишка", "id": 5956217000635139069},
-    {"name": "❤️ Сердце валентинка", "id": 5801108895304779062},
-    {"name": "🧸 Мишка 14 февраля", "id": 5800655655995968830},
-    {"name": "🌸 Мишка 8 марта", "id": 5866352046986232958},
-    {"name": "🍀 Мишка Патрик", "id": 5893356958802511476},
+    {"name": "❤️ Сердце", "id": 5801108895304779062},
+    {"name": "🧸 14 февраля", "id": 5800655655995968830},
+    {"name": "🌸 8 марта", "id": 5866352046986232958},
+    {"name": "🍀 Патрик", "id": 5893356958802511476},
     {"name": "🤡 Клоун", "id": 5935895822435615975}
 ]
 
@@ -38,60 +31,105 @@ def load_db():
         with open(GIFTS_DB, "w", encoding="utf-8") as f:
             json.dump(init_gifts, f, ensure_ascii=False, indent=4)
         return init_gifts
-    try:
-        with open(GIFTS_DB, "r", encoding="utf-8") as f: return json.load(f)
-    except: return init_gifts
+    with open(GIFTS_DB, "r", encoding="utf-8") as f: return json.load(f)
 
-def save_db(data):
-    with open(GIFTS_DB, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def clear(): os.system('cls' if os.name == 'nt' else 'clear')
+# Состояние для ожидания ввода данных
+user_state = {}
 
 async def get_balance(client):
     try:
-        res = await client(functions.payments.GetStarsStatusRequest(peer=types.InputPeerSelf()))
+        res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
         return res.balance.amount if hasattr(res.balance, 'amount') else res.balance
     except: return 0
 
-async def main_logic():
-    dev_name = get_author()
-    if dev_name != "@blackpean": return
-    
-    session_str = ""
-    if os.path.exists(SESSION_FILE):
-        with open(SESSION_FILE, "r") as f: session_str = f.read().strip()
-    
-    client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
-    await client.connect()
-    
-    if not await client.is_user_authorized():
-        await client.start()
-        with open(SESSION_FILE, "w") as f: f.write(client.session.save())
+session_str = ""
+if os.path.exists(SESSION_FILE):
+    with open(SESSION_FILE, "r") as f: session_str = f.read().strip()
 
-    while True:
-        clear()
-        me = await client.get_me()
-        balance = await get_balance(client)
-        console.print(Panel(f"👤 [bold white]Аккаунт:[/bold white] [cyan]{me.first_name}[/cyan]\n💎 [bold white]Баланс:[/bold white] [yellow]{balance} ⭐[/yellow]\n👨‍💻 [bold white]Dev:[/bold white] [green]{dev_name}[/green]", title="[bold magenta]Telegram Star Gifts[/bold magenta]", border_style="magenta", box=box.ROUNDED, width=60))
+client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
 
-        # НОВАЯ ПОДСКАЗКА ДЛЯ МАССОВОЙ РАССЫЛКИ
-        raw_recipients = console.input("\n[bold white]🎯 Кому (через запятую для рассылки): [/bold white]").strip()
-        if not raw_recipients: break
+async def send_main_menu():
+    balance = await get_balance(client)
+    gifts = load_db()
+    
+    text = (f"🎁 **Star Gifts Bot v4.0**\n"
+            f"👤 Аккаунт: **{(await client.get_me()).first_name}**\n"
+            f"💎 Баланс: **{balance} ⭐**\n\n"
+            f"Выберите подарок для отправки:")
+    
+    # Формируем кнопки по 2 в ряд
+    buttons = []
+    row = []
+    for i, g in enumerate(gifts):
+        row.append(Button.inline(g['name'], data=f"gift_{i}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row: buttons.append(row)
+    
+    buttons.append([Button.inline("🔄 Обновить баланс", data="refresh")])
+    
+    await client.send_message('me', text, buttons=buttons)
+
+@client.on(events.CallbackQuery)
+async def callback_handler(event):
+    data = event.data.decode()
+    
+    if data == "refresh":
+        await event.delete()
+        await send_main_menu()
         
-        # Парсим список получателей
-        recipients = [r.strip() for r in raw_recipients.split(",") if r.strip()]
+    elif data.startswith("gift_"):
+        idx = int(data.split("_")[1])
+        gift = load_db()[idx]
+        user_state[event.sender_id] = {"gift": gift, "step": "recipient"}
+        await event.edit(f"🎯 Выбран подарок: **{gift['name']}**\n\nОтправьте в ответ **Юзернейм** или **ID** получателя:")
 
-        while True:
-            clear()
-            current_gifts = load_db()
-            table = Table(box=box.ROUNDED, border_style="cyan", header_style="bold cyan", width=60, expand=True)
-            table.add_column("№", justify="center", width=4)
-            table.add_column("Название", justify="left")
-            table.add_column("ID", justify="right", style="dim", width=22)
+@client.on(events.events.NewMessage(chats='me'))
+async def message_handler(event):
+    state = user_state.get(event.sender_id)
+    if not state: return
+
+    if state['step'] == "recipient":
+        state['recipient'] = event.text
+        state['step'] = "comment"
+        await event.respond(f"✅ Получатель: `{event.text}`\n\nВведите **текст сообщения** (или напишите 'нет' для отправки без текста):")
+        
+    elif state['step'] == "comment":
+        comment = event.text if event.text.lower() != 'нет' else None
+        gift = state['gift']
+        recipient = state['recipient']
+        
+        await event.respond("🚀 **Отправка...**")
+        
+        try:
+            user = await client.get_entity(recipient)
+            peer = await client.get_input_entity(user)
             
-            for i, v in enumerate(current_gifts, 1):
-                table.add_row(str(i), v['name'], str(v['id']))
+            final_msg = types.TextWithEntities(text=comment, entities=[]) if comment else None
+            
+            inv = types.InputInvoiceStarGift(peer=peer, gift_id=gift['id'], hide_name=False, message=final_msg)
+            form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
+            await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
+            
+            await event.respond(f"✅ **Успешно отправлено!**\n🎁 {gift['name']} —> {recipient}")
+        except Exception as e:
+            await event.respond(f"❌ **Ошибка:**\n`{str(e)}` ")
+        
+        del user_state[event.sender_id]
+        await send_main_menu()
+
+async def main():
+    if get_author() != "@blackpean": return
+    await client.start()
+    with open(SESSION_FILE, "w") as f: f.write(client.session.save())
+    
+    print("Бот запущен! Проверьте 'Избранное' в Telegram.")
+    await send_main_menu()
+    await client.run_until_disconnected()
+
+if __name__ == "__main__":
+    asyncio.run(main())
             
             console.print(Panel(table, title="🎁 Выберите подарок", border_style="cyan", width=60))
             console.print(Panel("[bold magenta]➕ /set [ID] [Имя][/bold magenta]  [bold red]❌ /unset [№][/bold red]", box=box.ROUNDED, border_style="magenta", width=60))
