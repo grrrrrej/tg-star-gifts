@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+from datetime import datetime, timedelta, timezone
 from telethon import TelegramClient, events, functions, types, Button
 from telethon.sessions import StringSession
 
@@ -71,7 +72,7 @@ async def callback_handler(event):
     elif data.startswith("q_"):
         user_state[uid]["qty"] = int(data.split("_")[1])
         btns = [[Button.inline("👤 Открыто", data="a_no"), Button.inline("👻 Анонимно", data="a_yes")]]
-        await event.edit(f"🔢 **Кол-во:** {user_state[uid]['qty']}\n**Шаг 4:** Выбери тип отправки:", buttons=btns)
+        await event.edit(f"🔢 **Кол-во:** {user_state[uid]['qty']}\n**Шаг 4:** Тип отправки:", buttons=btns)
     elif data.startswith("a_"):
         user_state[uid]["anon"] = (data == "a_yes")
         if user_state[uid]["anon"]:
@@ -79,7 +80,7 @@ async def callback_handler(event):
             await process_sending(event, uid)
         else:
             user_state[uid]["step"] = "wait_comm"
-            await event.edit("💬 **Шаг 5:** Введи текст (или напиши 'нет'):")
+            await event.edit("💬 **Шаг 5:** Введи текст (или 'нет'):")
 
 async def process_sending(event, uid):
     s = user_state[uid]
@@ -92,7 +93,11 @@ async def process_sending(event, uid):
             form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
             await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
             if s["qty"] > 1: await asyncio.sleep(4.1)
-        await event.respond(f"✅ **Успешно!** {s['gift']['name']} доставлен.")
+        
+        # Время МСК
+        msk_time = datetime.now(timezone(timedelta(hours=3))).strftime('%d.%m.%Y %H:%M:%S')
+        await event.respond(f"✅ **Успешно!**\n🎁 Подарок: `{s['gift']['name']}`\n👤 Кому: `{s['target']}`\n⏰ Время (МСК): `{msk_time}`")
+        
     except Exception as e:
         await event.respond(f"❌ **Ошибка:** `{str(e)}` ")
     user_state.pop(uid, None)
@@ -120,40 +125,10 @@ async def run():
     await client.start()
     with open(SESSION_FILE, "w") as f: f.write(client.session.save())
     await send_main_menu()
+    print("\033[92mБот успешно запущен!\033[0m")
+    print("\033[94mПЕРЕЙДИТЕ В ИЗБРАННОЕ\033[0m")
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(run())
-        await event.respond(f"✅ **Успешно!** {s['gift']['name']} доставлен.")
-    except Exception as e:
-        await event.respond(f"❌ **Ошибка:** `{str(e)}` ")
-    user_state.pop(uid, None)
-    await send_main_menu()
-
-@client.on(events.NewMessage(chats='me'))
-async def message_handler(event):
-    uid = event.sender_id
-    if uid not in user_state: return
-    if user_state[uid]["step"] == "target":
-        user_state[uid]["target"], user_state[uid]["step"] = event.text, "select_gift"
-        btns = []
-        row = []
-        for i, g in enumerate(load_db()):
-            row.append(Button.inline(g['name'], data=f"g_{i}"))
-            if len(row) == 2: btns.append(row); row = []
-        if row: btns.append(row)
-        await event.respond(f"✅ **Кому:** `{event.text}`\n**Шаг 2:** Выбери подарок из списка:", buttons=btns)
-    elif user_state[uid]["step"] == "wait_comm":
-        user_state[uid]["comment"] = event.text if event.text.lower() != "нет" else None
-        await process_sending(event, uid)
-
-async def run():
-    if get_author() != "@blackpean": return
-    await client.start()
-    with open(SESSION_FILE, "w") as f: f.write(client.session.save())
-    await send_main_menu()
-    await client.run_until_disconnected()
-
-if __name__ == "__main__":
     asyncio.run(run())
