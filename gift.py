@@ -1,7 +1,6 @@
 import asyncio
 import os
 import json
-import sys
 from datetime import datetime, timedelta, timezone
 from telethon import TelegramClient, events, functions, types, Button
 from telethon.sessions import StringSession
@@ -32,7 +31,9 @@ def load_db():
         with open(GIFTS_DB, "w", encoding="utf-8") as f:
             json.dump(init_gifts, f, ensure_ascii=False, indent=4)
         return init_gifts
-    with open(GIFTS_DB, "r", encoding="utf-8") as f: return json.load(f)
+    try:
+        with open(GIFTS_DB, "r", encoding="utf-8") as f: return json.load(f)
+    except: return init_gifts
 
 user_state = {}
 session_str = ""
@@ -49,76 +50,96 @@ async def get_balance():
 
 async def send_main_menu():
     balance = await get_balance()
-    text = f"💎 **Баланс: {balance} ⭐**\nУправление подарками прямо здесь 👇"
-    btns = [[Button.inline("🎁 Отправить подарок", data="start_send")],
-            [Button.inline("🔄 Обновить баланс", data="refresh")]]
+    text = f"💎 **Баланс: {balance} ⭐**\nУправление подарками в меню ниже 👇"
+    btns = [
+        [Button.text("🎁 Отправить подарок", resize=True)],
+        [Button.text("🔄 Обновить баланс", resize=True)]
+    ]
     await client.send_message('me', text, buttons=btns)
-
-@client.on(events.CallbackQuery)
-async def callback_handler(event):
-    data = event.data.decode()
-    uid = event.sender_id
-    if data == "refresh":
-        await event.delete()
-        await send_main_menu()
-    elif data == "start_send":
-        user_state[uid] = {"step": "target"}
-        await event.edit("🎯 **Шаг 1:** Пришли ник или ID получателя:")
-    elif data.startswith("g_"):
-        user_state[uid]["gift"] = load_db()[int(data.split("_")[1])]
-        user_state[uid]["step"] = "qty"
-        btns = [[Button.inline("1", data="q_1"), Button.inline("2", data="q_2"), Button.inline("5", data="q_5")],
-                [Button.inline("10", data="q_10")]]
-        await event.edit(f"🎁 **Подарок:** {user_state[uid]['gift']['name']}\n**Шаг 3:** Сколько штук?", buttons=btns)
-    elif data.startswith("q_"):
-        user_state[uid]["qty"] = int(data.split("_")[1])
-        btns = [[Button.inline("👤 Открыто", data="a_no"), Button.inline("👻 Анонимно", data="a_yes")]]
-        await event.edit(f"🔢 **Кол-во:** {user_state[uid]['qty']}\n**Шаг 4:** Тип отправки:", buttons=btns)
-    elif data.startswith("a_"):
-        user_state[uid]["anon"] = (data == "a_yes")
-        if user_state[uid]["anon"]:
-            user_state[uid]["comment"] = None
-            await process_sending(event, uid)
-        else:
-            user_state[uid]["step"] = "wait_comm"
-            await event.edit("💬 **Шаг 5:** Введи текст (или напиши 'нет'):")
 
 async def process_sending(event, uid):
     s = user_state[uid]
-    await event.respond("🚀 **Отправка запущена...**")
+    await event.respond("🚀 **Отправка запущена...**", buttons=Button.clear())
     try:
         user = await client.get_entity(s["target"])
         msg = types.TextWithEntities(text=s["comment"], entities=[]) if s["comment"] else None
+        
         for _ in range(s["qty"]):
             inv = types.InputInvoiceStarGift(peer=user, gift_id=s["gift"]["id"], hide_name=s["anon"], message=msg)
             form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
             await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
             if s["qty"] > 1: await asyncio.sleep(4.1)
         
-        msk_time = datetime.now(timezone(timedelta(hours=3))).strftime('%d.%m.%Y %H:%M:%S')
-        await event.respond(f"✅ **Успешно!**\n🎁 Подарок: `{s['gift']['name']}`\n👤 Кому: `{s['target']}`\n⏰ Время (МСК): `{msk_time}`")
-        
+        # Время МСК
+        msk = datetime.now(timezone(timedelta(hours=3))).strftime('%d.%m.%Y %H:%M:%S')
+        await event.respond(
+            f"✅ **Успешно!**\n"
+            f"🎁 Подарок: `{s['gift']['name']}`\n"
+            f"👤 Кому: `{s['target']}`\n"
+            f"⏰ Дата/Время: `{msk} (МСК)`"
+        )
     except Exception as e:
         await event.respond(f"❌ **Ошибка:** `{str(e)}` ")
+    
     user_state.pop(uid, None)
     await send_main_menu()
 
 @client.on(events.NewMessage(chats='me'))
 async def message_handler(event):
     uid = event.sender_id
+    text = event.text
+    
+    # Команды главного меню
+    if text == "🎁 Отправить подарок":
+        user_state[uid] = {"step": "target"}
+        await event.respond("🎯 **Шаг 1:** Пришли ник или ID получателя:", buttons=Button.clear())
+        return
+    elif text == "🔄 Обновить баланс":
+        await send_main_menu()
+        return
+
     if uid not in user_state: return
     state = user_state[uid]
+
+    # Шаг 1: Получили цель
     if state["step"] == "target":
-        user_state[uid]["target"], user_state[uid]["step"] = event.text, "select_gift"
-        btns = []
-        row = []
-        for i, g in enumerate(load_db()):
-            row.append(Button.inline(g['name'], data=f"g_{i}"))
-            if len(row) == 2: btns.append(row); row = []
-        if row: btns.append(row)
-        await event.respond(f"✅ **Кому:** `{event.text}`\n**Шаг 2:** Выбери подарок:", buttons=btns)
-    elif state["step"] == "wait_comm":
-        user_state[uid]["comment"] = event.text if event.text.lower() != "нет" else None
+        user_state[uid]["target"] = text
+        user_state[uid]["step"] = "gift"
+        btns = [[Button.text(g['name'], resize=True)] for g in load_db()]
+        await event.respond(f"✅ Кому: `{text}`\n**Шаг 2:** Выбери подарок:", buttons=btns)
+    
+    # Шаг 2: Получили подарок
+    elif state["step"] == "gift":
+        gifts = load_db()
+        gift = next((g for g in gifts if g['name'] == text), None)
+        if gift:
+            user_state[uid]["gift"] = gift
+            user_state[uid]["step"] = "qty"
+            btns = [[Button.text("1", resize=True), Button.text("2", resize=True), Button.text("3", resize=True)],
+                    [Button.text("5", resize=True), Button.text("10", resize=True)]]
+            await event.respond(f"🎁 Выбрано: **{text}**\n**Шаг 3:** Сколько штук отправить?", buttons=btns)
+    
+    # Шаг 3: Получили количество
+    elif state["step"] == "qty":
+        if text.isdigit():
+            user_state[uid]["qty"] = int(text)
+            user_state[uid]["step"] = "anon"
+            btns = [[Button.text("👤 Открыто", resize=True), Button.text("👻 Анонимно", resize=True)]]
+            await event.respond(f"🔢 Кол-во: **{text}**\n**Шаг 4:** Выбери тип отправки:", buttons=btns)
+    
+    # Шаг 4: Анонимность
+    elif state["step"] == "anon":
+        user_state[uid]["anon"] = (text == "👻 Анонимно")
+        if user_state[uid]["anon"]:
+            user_state[uid]["comment"] = None
+            await process_sending(event, uid)
+        else:
+            user_state[uid]["step"] = "comm"
+            await event.respond("💬 **Шаг 5:** Введи текст комментария (или напиши 'нет'):", buttons=Button.clear())
+            
+    # Шаг 5: Комментарий
+    elif state["step"] == "comm":
+        user_state[uid]["comment"] = text if text.lower() != "нет" else None
         await process_sending(event, uid)
 
 async def start_bot():
@@ -130,7 +151,6 @@ async def start_bot():
     print("\033[94mПЕРЕЙДИТЕ В ИЗБРАННОЕ\033[0m")
     await client.run_until_disconnected()
 
-# Фикс для запуска из любой среды
 def run():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
