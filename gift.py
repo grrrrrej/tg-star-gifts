@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+import sys
 from datetime import datetime, timedelta, timezone
 from telethon import TelegramClient, events, functions, types, Button
 from telethon.sessions import StringSession
@@ -80,7 +81,7 @@ async def callback_handler(event):
             await process_sending(event, uid)
         else:
             user_state[uid]["step"] = "wait_comm"
-            await event.edit("💬 **Шаг 5:** Введи текст (или 'нет'):")
+            await event.edit("💬 **Шаг 5:** Введи текст (или напиши 'нет'):")
 
 async def process_sending(event, uid):
     s = user_state[uid]
@@ -94,7 +95,6 @@ async def process_sending(event, uid):
             await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
             if s["qty"] > 1: await asyncio.sleep(4.1)
         
-        # Время МСК
         msk_time = datetime.now(timezone(timedelta(hours=3))).strftime('%d.%m.%Y %H:%M:%S')
         await event.respond(f"✅ **Успешно!**\n🎁 Подарок: `{s['gift']['name']}`\n👤 Кому: `{s['target']}`\n⏰ Время (МСК): `{msk_time}`")
         
@@ -107,7 +107,8 @@ async def process_sending(event, uid):
 async def message_handler(event):
     uid = event.sender_id
     if uid not in user_state: return
-    if user_state[uid]["step"] == "target":
+    state = user_state[uid]
+    if state["step"] == "target":
         user_state[uid]["target"], user_state[uid]["step"] = event.text, "select_gift"
         btns = []
         row = []
@@ -116,11 +117,11 @@ async def message_handler(event):
             if len(row) == 2: btns.append(row); row = []
         if row: btns.append(row)
         await event.respond(f"✅ **Кому:** `{event.text}`\n**Шаг 2:** Выбери подарок:", buttons=btns)
-    elif user_state[uid]["step"] == "wait_comm":
+    elif state["step"] == "wait_comm":
         user_state[uid]["comment"] = event.text if event.text.lower() != "нет" else None
         await process_sending(event, uid)
 
-async def run():
+async def start_bot():
     if get_author() != "@blackpean": return
     await client.start()
     with open(SESSION_FILE, "w") as f: f.write(client.session.save())
@@ -129,6 +130,11 @@ async def run():
     print("\033[94mПЕРЕЙДИТЕ В ИЗБРАННОЕ\033[0m")
     await client.run_until_disconnected()
 
+# Фикс для запуска из любой среды
+def run():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_bot())
+
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(run())
+    run()
