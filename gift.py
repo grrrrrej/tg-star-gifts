@@ -51,7 +51,7 @@ def save_db(data):
 def list_gifts_text(db):
     text = "📦 Доступные подарки:\n\n"
     for i, g in enumerate(db, 1):
-        text += f"{i}. {g['name']} (ID: {g['id']})\n"
+        text += f"{i}. {g['name']}\n"
     return text
 
 user_state = {}
@@ -100,12 +100,12 @@ async def send_stars_request_with_retry(invoice, event, retry_count=0):
         return True
     except FloodWaitError as e:
         wait_time = e.seconds
-        await event.respond(wrap(f"⏳ Лимит Telegram! Ожидание {wait_time} сек. (попытка {retry_count + 1}/3)..."))
+        await event.respond(wrap(f"⏳ Лимит Telegram! Ожидание {wait_time} сек..."))
         await asyncio.sleep(wait_time)
         if retry_count < 2:
             return await send_stars_request_with_retry(invoice, event, retry_count + 1)
         else:
-            await event.respond(wrap("❌ Превышены лимиты Telegram. Попробуйте позже."))
+            await event.respond(wrap("❌ Превышены лимиты Telegram."))
             return False
     except Exception as e:
         if retry_count < 2:
@@ -167,9 +167,9 @@ async def message_handler(event):
                 else:
                     await event.respond(wrap(f"❌ Номер должен быть от 1 до {len(db)}"))
             except ValueError:
-                await event.respond(wrap("❌ Введите номер подарка для удаления\nПример: .unset 3"))
+                await event.respond(wrap("❌ Введите номер подарка"))
         else:
-            await event.respond(wrap("❌ Использование:\n.unset НОМЕР\n\nПосмотреть номера: .list"))
+            await event.respond(wrap("❌ Использование: .unset НОМЕР"))
         await send_main_menu()
         return
 
@@ -183,7 +183,7 @@ async def message_handler(event):
             "anon": False,
             "comment": None
         }
-        m = await event.respond(wrap("🎁 Шаг 1/4 – Получатель\n\nВведите @username или ID:"), buttons=Button.clear())
+        m = await event.respond("Шаг 1 - Получатель\n\n" + wrap("Введите @username или ID:"), buttons=Button.clear())
         user_state[uid]["last_msg"] = m.id
         return
 
@@ -196,11 +196,11 @@ async def message_handler(event):
         await clean_chat(event, uid)
         st.update({"target": text, "step": "choice"})
         db = load_db()
-        menu = "🎁 Шаг 2/4 – Выбор подарка\n\n" + list_gifts_text(db)
+        menu = "Шаг 2 - Выбор подарка\n\n" + wrap(list_gifts_text(db))
         btns = []
         for i in range(len(db)):
             btns.append(Button.text(str(i+1), resize=True))
-        m = await event.respond(wrap(menu), buttons=[btns[i:i+3] for i in range(0, len(btns), 3)])
+        m = await event.respond(menu, buttons=[btns[i:i+3] for i in range(0, len(btns), 3)])
         st["last_msg"] = m.id
 
     elif st["step"] == "choice" and text.isdigit():
@@ -209,19 +209,19 @@ async def message_handler(event):
         if 0 <= idx < len(db):
             await clean_chat(event, uid)
             st.update({"gift": db[idx], "step": "qty"})
-            m = await event.respond(wrap(f"🎁 Шаг 3/4 – Количество\n\nВыбрано: {db[idx]['name']}\nВведите число:"), 
+            m = await event.respond("Шаг 3 - Количество\n\n" + wrap(f"Выбрано: {db[idx]['name']}\nВведите число:"), 
                                     buttons=[[Button.text("1"), Button.text("3"), Button.text("5")]])
             st["last_msg"] = m.id
         else:
             await clean_chat(event, uid)
-            m = await event.respond(wrap(f"❌ Неверный номер. Введите число от 1 до {len(db)}"))
+            m = await event.respond(wrap(f"❌ Неверный номер. Введите от 1 до {len(db)}"))
             st["last_msg"] = m.id
 
     elif st["step"] == "qty" and text.isdigit():
         qty = int(text)
         if qty > 50:
             await clean_chat(event, uid)
-            m = await event.respond(wrap("⚠️ Предупреждение: большое количество подарков\nTelegram может временно ограничить аккаунт.\n\nПродолжить?"), 
+            m = await event.respond(wrap("⚠️ Большое количество подарков\nTelegram может ограничить аккаунт.\n\nПродолжить?"), 
                                     buttons=[[Button.text("✅ Да"), Button.text("❌ Нет")]])
             st["last_msg"] = m.id
             st["pending_qty"] = qty
@@ -229,7 +229,7 @@ async def message_handler(event):
         else:
             await clean_chat(event, uid)
             st.update({"qty": qty, "step": "anon"})
-            m = await event.respond(wrap("🎁 Шаг 4/4 – Анонимность\n\nСкрыть ваше имя?"), 
+            m = await event.respond("Анонимность\n\n" + wrap("Отправить анонимно?"), 
                                     buttons=[[Button.text("Да"), Button.text("Нет")]])
             st["last_msg"] = m.id
 
@@ -237,7 +237,7 @@ async def message_handler(event):
         await clean_chat(event, uid)
         if "да" in low_text:
             st.update({"qty": st["pending_qty"], "step": "anon"})
-            m = await event.respond(wrap("🎁 Шаг 4/4 – Анонимность\n\nСкрыть ваше имя?"), 
+            m = await event.respond("Анонимность\n\n" + wrap("Отправить анонимно?"), 
                                     buttons=[[Button.text("Да"), Button.text("Нет")]])
             st["last_msg"] = m.id
         else:
@@ -248,24 +248,24 @@ async def message_handler(event):
     elif st["step"] == "anon":
         await clean_chat(event, uid)
         is_anon = "да" in low_text
-        st.update({"anon": is_anon, "step": "comment"})
+        st.update({"anon": is_anon, "step": "finish"})
         
-        if is_anon:
-            await execute_gift(event, uid)
-        else:
-            m = await event.respond(wrap("💬 Комментарий к подарку\n\nВведите текст или нажмите кнопку:"), 
-                                    buttons=[[Button.text("Пропустить")]])
-            st["last_msg"] = m.id
-
-    elif st["step"] == "comment":
-        await clean_chat(event, uid)
-        if "пропустить" not in low_text:
-            st["comment"] = text
+        result_text = (
+            f"✅ ОТПРАВЛЕНО\n\n"
+            f"Подарок: {st['gift']['name']}\n"
+            f"Кол-во: {st['qty']}\n"
+            f"Кому: {st['target']}\n"
+            f"Анонимно: {'Да' if is_anon else 'Нет'}"
+        )
+        
+        m = await event.respond(wrap(result_text))
+        st["last_msg"] = m.id
+        
         await execute_gift(event, uid)
 
 async def execute_gift(event, uid):
     s = user_state[uid]
-    status_msg = await event.respond(wrap("🚀 Отправка подарков..."))
+    status_msg = await event.respond(wrap("🚀 Отправка..."))
     
     success_count = 0
     fail_count = 0
@@ -274,15 +274,11 @@ async def execute_gift(event, uid):
         peer = await client.get_entity(s["target"])
         
         for i in range(s["qty"]):
-            comment_obj = None
-            if not s["anon"] and s.get("comment"):
-                comment_obj = types.TextWithEntities(s["comment"], [])
-            
             inv = types.InputInvoiceStarGift(
                 peer=peer, 
                 gift_id=s["gift"]["id"], 
                 hide_name=s["anon"],
-                message=comment_obj
+                message=None
             )
             
             try:
@@ -294,31 +290,17 @@ async def execute_gift(event, uid):
                     break
             except Exception as e:
                 fail_count += 1
-                await event.respond(wrap(f"❌ Ошибка при отправке #{i+1}:\n{str(e)}"))
+                await event.respond(wrap(f"❌ Ошибка #{i+1}:\n{str(e)}"))
                 break
             
             if s["qty"] > 1 and i < s["qty"] - 1:
                 await asyncio.sleep(2)
         
-        if success_count > 0:
-            result_text = (
-                f"✅ ОТПРАВЛЕНО\n\n"
-                f"🎁 Подарок: {s['gift']['name']}\n"
-                f"📦 Кол-во: {success_count}/{s['qty']}\n"
-                f"👤 Кому: {s['target']}\n"
-                f"👻 Анонимно: {'Да' if s['anon'] else 'Нет'}"
-            )
-            if s.get("comment") and not s["anon"]:
-                result_text += f"\n💬 Комментарий: {s['comment']}"
-            if fail_count > 0:
-                result_text += f"\n\n⚠️ Не отправлено: {fail_count}"
-            
-            await event.respond(wrap(result_text))
-        else:
-            await event.respond(wrap("❌ НЕ УДАЛОСЬ ОТПРАВИТЬ\n\nПроверьте баланс Stars или повторите позже."))
+        if fail_count > 0:
+            await event.respond(wrap(f"⚠️ Не отправлено: {fail_count}"))
         
     except Exception as e:
-        await event.respond(wrap(f"❌ КРИТИЧЕСКАЯ ОШИБКА\n\n{str(e)}"))
+        await event.respond(wrap(f"❌ ОШИБКА\n\n{str(e)}"))
     
     try:
         await client.delete_messages('me', [status_msg.id])
@@ -360,7 +342,14 @@ async def main():
     print(f"Аккаунт: {me.first_name}")
     print(f"Подарков в базе: {len(load_db())}")
     
-    await client.run_until_disconnected()
+    try:
+        await client.run_until_disconnected()
+    except KeyboardInterrupt:
+        print("\nЗавершение работы...")
+    except Exception as e:
+        print(f"\nОшибка: {e}")
+    finally:
+        print("Бот остановлен")
 
 def run():
     asyncio.run(main())
