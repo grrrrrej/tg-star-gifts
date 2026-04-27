@@ -63,7 +63,7 @@ async def send_main_menu():
         bal = getattr(res.balance, 'amount', res.balance)
     except: bal = "ERR"
     
-    header = "✨ STAR GIFTS MANAGER v7.7 ✨\n━━━━━━━━━━━━━━━━━━━━\n"
+    header = "✨ STAR GIFTS MANAGER v7.8 ✨\n━━━━━━━━━━━━━━━━━━━━\n"
     content = f"💎 БАЛАНС: {bal} STARS\n\n🎁 .gift – Отправить\n📜 .list – Список"
     msg = await client.send_message('me', f"{header}{wrap(content)}", 
         buttons=[[Button.text("🎁 .gift", resize=True)], [Button.text("💎 .bal", resize=True)]])
@@ -80,7 +80,8 @@ async def message_handler(event):
         await client.delete_messages('me', [event.id])
         m_id = await send_main_menu()
         await asyncio.sleep(10)
-        await client.delete_messages('me', [m_id])
+        try: await client.delete_messages('me', [m_id])
+        except: pass
         return
 
     if low_text in [".gift", "🎁 .gift"]:
@@ -124,7 +125,6 @@ async def message_handler(event):
 
     elif st["step"] == "anon":
         st.update({"anon": "да" in low_text, "step": "comment"})
-        # Если анонимно — пропускаем шаг комментария сразу
         if st["anon"]:
             st["comment"] = None
             st["step"] = "confirm"
@@ -158,9 +158,7 @@ async def execute_gift(event, uid):
         peer = await client.get_entity(s["target"])
         for _ in range(s["qty"]):
             try:
-                # Явная проверка: если анонимно, комментарий строго None
                 final_comment = None if s["anon"] else (types.TextWithEntities(s["comment"], []) if s["comment"] else None)
-                
                 inv = types.InputInvoiceStarGift(peer=peer, gift_id=s["gift"]["id"], hide_name=s["anon"], 
                                                message=final_comment)
                 form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
@@ -206,5 +204,11 @@ async def main():
 
     await client.run_until_disconnected()
 
+def run():
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run()
