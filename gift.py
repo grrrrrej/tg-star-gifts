@@ -374,7 +374,15 @@ async def main():
     
     client.add_event_handler(message_handler)
     
-    await client.start()
+    # === ИЗМЕНЕНИЯ ЗДЕСЬ ===
+    # Явные запросы для авторизации через терминал
+    await client.start(
+        phone=lambda: input("📱 Введите ваш номер телефона (например, +1234567890): "),
+        code_callback=lambda: input("💬 Введите код из Telegram: "),
+        password=lambda: input("🔑 Введите пароль 2FA (если нет - просто нажмите Enter): ")
+    )
+    # =======================
+
     if not ss:
         with open(SESSION_FILE, "w") as f:
             f.write(client.session.save())
