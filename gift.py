@@ -63,6 +63,8 @@ async def clean_previous(event, uid, keep_last=False):
     targets = []
     if "prev_msgs" in user_state[uid]:
         targets.extend(user_state[uid]["prev_msgs"])
+    if "user_msgs" in user_state[uid]:
+        targets.extend(user_state[uid]["user_msgs"])
     if not keep_last and "last_msg" in user_state[uid]:
         targets.append(user_state[uid]["last_msg"])
     if targets:
@@ -72,6 +74,7 @@ async def clean_previous(event, uid, keep_last=False):
             pass
     if not keep_last:
         user_state[uid]["prev_msgs"] = []
+        user_state[uid]["user_msgs"] = []
         if "last_msg" in user_state[uid]:
             user_state[uid]["prev_msgs"].append(user_state[uid]["last_msg"])
 
@@ -181,7 +184,8 @@ async def message_handler(event):
             "qty": 1,
             "anon": False,
             "comment": None,
-            "prev_msgs": []
+            "prev_msgs": [],
+            "user_msgs": []
         }
         m = await event.respond(
             "🎯 ШАГ 1/5 - КТО ПОЛУЧАЕТ? 🎯\n" + wrap("Введите @username или ID получателя:"), 
@@ -195,6 +199,10 @@ async def message_handler(event):
         return
     
     st = user_state[uid]
+    
+    if "user_msgs" not in st:
+        st["user_msgs"] = []
+    st["user_msgs"].append(event.id)
 
     if st["step"] == "target":
         await clean_previous(event, uid, keep_last=True)
@@ -269,8 +277,8 @@ async def message_handler(event):
         st["step"] = "confirm"
 
     elif st["step"] == "confirm":
+        await clean_previous(event, uid, keep_last=True)
         if "✅" in text or "да" in low_text:
-            await clean_previous(event, uid, keep_last=True)
             await execute_gift(event, uid)
         else:
             user_state.pop(uid, None)
@@ -321,13 +329,22 @@ async def execute_gift(event, uid):
         if fail_count > 0:
             result_text += f"\n\n⚠️ Не отправлено: {fail_count}"
         
-        await event.respond(wrap(result_text))
+        result_msg = await event.respond(wrap(result_text))
         
-        await asyncio.sleep(3)
+        await asyncio.sleep(10)
+        
+        try:
+            await client.delete_messages('me', [result_msg.id])
+        except:
+            pass
         
     except Exception as e:
-        await event.respond(wrap(f"❌ ОШИБКА\n\n{str(e)}"))
-        await asyncio.sleep(5)
+        error_msg = await event.respond(wrap(f"❌ ОШИБКА\n\n{str(e)}"))
+        await asyncio.sleep(10)
+        try:
+            await client.delete_messages('me', [error_msg.id])
+        except:
+            pass
     
     try:
         await client.delete_messages('me', [status_msg.id])
