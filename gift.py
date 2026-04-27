@@ -14,7 +14,6 @@ def get_sys_info():
     try: return binascii.unhexlify(ID_KEY).decode() 
     except: return "Admin"
 
-# Начальная база подарков
 init_gifts = [ 
     {"name": "🎄 Елка", "id": 5922558454332916696}, 
     {"name": "🧸 Мишка", "id": 5956217000635139069}, 
@@ -27,8 +26,7 @@ init_gifts = [
 
 def load_db(): 
     if not os.path.exists(GIFTS_DB): 
-        save_db(init_gifts) 
-        return init_gifts 
+        save_db(init_gifts); return init_gifts 
     try: 
         with open(GIFTS_DB, "r", encoding="utf-8") as f: return json.load(f) 
     except: return init_gifts
@@ -41,7 +39,6 @@ user_state = {}
 client = None
 
 async def clean_chat(event, uid): 
-    """Эффект одного окна: удаление команд и старых сообщений""" 
     targets = [event.id] 
     if uid in user_state and "last_msg" in user_state[uid]: 
         targets.append(user_state[uid]["last_msg"]) 
@@ -49,7 +46,6 @@ async def clean_chat(event, uid):
     except: pass
 
 async def send_main_menu(): 
-    """Главное меню с балансом""" 
     try: 
         res = await client(functions.payments.GetStarsStatusRequest(peer='me')) 
         bal = getattr(res.balance, 'amount', res.balance) 
@@ -75,48 +71,41 @@ async def message_handler(event):
     args = text.split()
 
     if low_text == ".bal": 
-        await clean_chat(event, uid) 
+        await clean_chat(event, uid); return await send_main_menu()
+
+    if low_text.startswith(".set "):
+        await clean_chat(event, uid)
+        if len(args) >= 3:
+            name, g_id = " ".join(args[1:-1]), args[-1]
+            db = load_db()
+            db = [g for g in db if g['name'].lower() != name.lower()]
+            db.append({"name": name, "id": int(g_id)})
+            save_db(db)
         return await send_main_menu()
 
-    # --- УПРАВЛЕНИЕ БАЗОЙ --- 
-    if low_text.startswith(".set "): 
-        await clean_chat(event, uid) 
-        if len(args) >= 3: 
-            name, g_id = " ".join(args[1:-1]), args[-1] 
-            db = load_db() 
-            db = [g for g in db if g['name'].lower() != name.lower()] 
-            db.append({"name": name, "id": int(g_id)}) 
-            save_db(db) 
-            m = await event.respond(f"✅ Подарок `{name}` сохранен!") 
-            await asyncio.sleep(2); await client.delete_messages('me', m.id) 
+    if low_text.startswith(".unset "):
+        await clean_chat(event, uid)
+        name = " ".join(args[1:])
+        db = load_db()
+        save_db([g for g in db if g['name'].lower() != name.lower()])
         return await send_main_menu()
 
-    if low_text.startswith(".unset "): 
-        await clean_chat(event, uid) 
-        name = " ".join(args[1:]) 
-        db = load_db() 
-        save_db([g for g in db if g['name'].lower() != name.lower()]) 
-        m = await event.respond(f"🗑 Подарок `{name}` удален.") 
-        await asyncio.sleep(2); await client.delete_messages('me', m.id) 
-        return await send_main_menu()
-
-    # --- МАСТЕР ОТПРАВКИ --- 
-    if low_text == ".gift": 
-        await clean_chat(event, uid) 
-        user_state[uid] = {"step": "target"} 
-        m = await event.respond("🔘 **Шаг 1/5**\n\n> Введите `@username` или `ID` получателя:", buttons=Button.clear()) 
-        user_state[uid]["last_msg"] = m.id 
+    if low_text == ".gift":
+        await clean_chat(event, uid)
+        user_state[uid] = {"step": "target"}
+        m = await event.respond("🔘 **Шаг 1/5**\n> Введите `@username` или `ID` получателя:", buttons=Button.clear()) 
+        user_state[uid]["last_msg"] = m.id
         return
 
     if uid not in user_state: return 
     st = user_state[uid]
 
     if st["step"] == "target": 
-        await clean_chat(event, uid) 
-        st.update({"target": text, "step": "choice"}) 
-        gifts = load_db() 
-        menu = "🔘 **Шаг 2/5: Выберите номер подарка**\n\n" 
-        btns = [] 
+        await clean_chat(event, uid)
+        st.update({"target": text, "step": "choice"})
+        gifts = load_db()
+        menu = "🔘 **Шаг 2/5: Выбор подарка**\n\n" 
+        btns = []
         for i, g in enumerate(gifts): 
             menu += f"**{i+1}** ➔ `{g['name']}`\n" 
             btns.append(Button.text(str(i+1), resize=True)) 
@@ -124,43 +113,43 @@ async def message_handler(event):
         st["last_msg"] = m.id
 
     elif st["step"] == "choice" and text.isdigit(): 
-        db = load_db() 
-        idx = int(text) - 1 
-        if 0 <= idx < len(db): 
-            await clean_chat(event, uid) 
-            st.update({"gift": db[idx], "step": "qty"}) 
-            btns = [[Button.text("1"), Button.text("3"), Button.text("5")], [Button.text("10")]] 
+        db = load_db()
+        idx = int(text) - 1
+        if 0 <= idx < len(db):
+            await clean_chat(event, uid)
+            st.update({"gift": db[idx], "step": "qty"})
+            btns = [[Button.text("1"), Button.text("3"), Button.text("5")]]
             m = await event.respond(f"🔘 **Шаг 3/5**\n> Выбран: `{st['gift']['name']}`\n\n**Сколько штук отправить?**", buttons=btns) 
             st["last_msg"] = m.id
 
     elif st["step"] == "qty" and text.isdigit(): 
-        await clean_chat(event, uid) 
-        st.update({"qty": int(text), "step": "anon"}) 
-        btns = [[Button.text("Анонимно"), Button.text("Открыто")]] 
-        m = await event.respond(f"🔘 **Шаг 4/5**\n> Кол-во: `{text}`\n\n**Режим отправки:**", buttons=btns) 
+        await clean_chat(event, uid)
+        st.update({"qty": int(text), "step": "anon"})
+        btns = [[Button.text("Да (Анонимно)"), Button.text("Нет (Открыто)")]] 
+        m = await event.respond(f"🔘 **Шаг 4/5**\n> Кол-во: `{text}`\n\n**Режим отправки (Анонимно?):**", buttons=btns) 
         st["last_msg"] = m.id
 
     elif st["step"] == "anon": 
-        await clean_chat(event, uid) 
-        st.update({"anon": "аноним" in low_text, "step": "comm"}) 
-        m = await event.respond("🔘 **Шаг 5/5**\n\n**Введите текст комментария:**", buttons=[[Button.text("Пропустить ➡️")]]) 
+        await clean_chat(event, uid)
+        # Принимает Да/Нет/Анон/любой регистр
+        is_anon = any(x in low_text for x in ["да", "анон", "yes", "true"])
+        st.update({"anon": is_anon, "step": "comm"})
+        m = await event.respond("🔘 **Шаг 5/5**\n> Режим: " + ("`Анонимно`" if is_anon else "`Открыто`") + "\n\n**Текст комментария:**", buttons=[[Button.text("Пропустить ➡️")]]) 
         st["last_msg"] = m.id
 
     elif st["step"] == "comm": 
-        await clean_chat(event, uid) 
+        await clean_chat(event, uid)
         st["comment"] = None if "пропустить" in low_text else text 
         await run_delivery(event, uid)
 
 async def run_delivery(event, uid): 
     s = user_state[uid] 
-    status = await event.respond("🚀 **Выполняется отправка...**", buttons=Button.clear()) 
+    status = await event.respond("🚀 **Отправка...**", buttons=Button.clear()) 
     try: 
         user = await client.get_entity(s["target"]) 
         for i in range(s["qty"]): 
-            inv = types.InputInvoiceStarGift( 
-                peer=user, gift_id=s["gift"]["id"], hide_name=s["anon"], 
-                message=types.TextWithEntities(s["comment"], []) if s["comment"] else None 
-            ) 
+            inv = types.InputInvoiceStarGift(peer=user, gift_id=s["gift"]["id"], hide_name=s["anon"], 
+                message=types.TextWithEntities(s["comment"], []) if s["comment"] else None) 
             form = await client(functions.payments.GetPaymentFormRequest(invoice=inv)) 
             await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv)) 
             if s["qty"] > 1: await asyncio.sleep(3.5) 
@@ -178,16 +167,13 @@ async def start_bot():
     session_str = "" 
     if os.path.exists(SESSION_FILE): 
         with open(SESSION_FILE, "r") as f: session_str = f.read().strip() 
-    
     client = TelegramClient(StringSession(session_str), API_ID, API_HASH) 
     client.add_event_handler(message_handler) 
-    
     await client.start() 
     if not session_str: 
         with open(SESSION_FILE, "w") as f: f.write(client.session.save()) 
-    
     await send_main_menu() 
-    print("\033[92m[LOG] Бот запущен! ПЕРЕЙДИТЕ В ИЗБРАННОЕ\033[0m") 
+    print("[LOG] Started") 
     await client.run_until_disconnected()
 
 def run(): 
