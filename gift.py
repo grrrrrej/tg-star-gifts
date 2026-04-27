@@ -26,11 +26,11 @@ def wrap(text):
 
 init_gifts = [
     {"name": "🎄 Елка", "id": 5922558454332916696},
-    {"name": "🧸 Мишка", "id": 5956217000635139069},
-    {"name": "❤️ Сердце", "id": 5801108895304779062},
-    {"name": "🎁 14 февраля", "id": 5800655655995968830},
-    {"name": "🌸 8 марта", "id": 5866352046986232958},
-    {"name": "🍀 Патрик", "id": 5893356958802511476},
+    {"name": "🎄 Новогодний мишка", "id": 5956217000635139069},
+    {"name": "❤️ Сердце валентинка", "id": 5801108895304779062},
+    {"name": "🧸 Мишка 14 февраля", "id": 5800655655995968830},
+    {"name": "🌸 Мишка 8 марта", "id": 5866352046986232958},
+    {"name": "🍀 Мишка Патрик", "id": 5893356958802511476},
     {"name": "🤡 Клоун", "id": 5935895822435615975}
 ]
 
@@ -94,6 +94,9 @@ async def send_main_menu():
     header = (
         f"✨✨✨ STAR GIFTS MANAGER v7.5 ✨✨✨\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    )
+    
+    content = (
         f"💎 БАЛАНС: {bal} STARS 💎\n\n"
         f"📋 КОМАНДЫ:\n"
         f"  🎁 .gift  – Отправить подарок\n"
@@ -102,11 +105,11 @@ async def send_main_menu():
         f"  ❌ .unset – Удалить подарок"
     )
     
-    footer = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👨‍💻 DEV: {get_dev()}"
+    footer = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👨‍💻 DEV: {get_dev()}"
     
     msg = await client.send_message(
         'me', 
-        f"{wrap(header)}\n{footer}", 
+        f"{header}{wrap(content)}{footer}", 
         buttons=[[Button.text("🎁 .gift", resize=True)], [Button.text("💎 .bal", resize=True)]]
     )
     return msg.id
@@ -203,7 +206,7 @@ async def message_handler(event):
             "result_msg": None
         }
         m = await event.respond(
-            "🎯 ШАГ 1/4 - КТО ПОЛУЧАЕТ? 🎯\n\n" + wrap("Введите @username или ID:"), 
+            "🎯 ШАГ 1/4 - КТО ПОЛУЧАЕТ? 🎯\n" + wrap("Введите @username или ID:"), 
             buttons=Button.clear()
         )
         user_state[uid]["last_msg"] = m.id
@@ -218,7 +221,7 @@ async def message_handler(event):
         await clean_chat(event, uid)
         st.update({"target": text, "step": "choice"})
         db = load_db()
-        menu = "🎨 ШАГ 2/4 - ВЫБОР ПОДАРКА 🎨\n\n" + wrap(list_gifts_text(db))
+        menu = "🎨 ШАГ 2/4 - ВЫБОР ПОДАРКА 🎨\n" + wrap(list_gifts_text(db))
         btns = []
         for i in range(len(db)):
             btns.append(Button.text(str(i+1), resize=True))
@@ -230,50 +233,50 @@ async def message_handler(event):
         idx = int(text) - 1
         if 0 <= idx < len(db):
             await clean_chat(event, uid)
-            st.update({"gift": db[idx], "step": "qty"})
-            m = await event.respond(
-                "🔢 ШАГ 3/4 - КОЛИЧЕСТВО 🔢\n\n" + wrap(f"Выбрано: {db[idx]['name']}\nСколько отправить?"), 
-                buttons=[[Button.text("1"), Button.text("3"), Button.text("5"), Button.text("10")]]
+            st.update({"gift": db[idx], "step": "confirm"})
+            
+            confirm_text = (
+                f"📋 ПРОВЕРЬ ДАННЫЕ 📋\n\n"
+                f"🎁 Подарок: {db[idx]['name']}\n"
+                f"👤 Получатель: {st['target']}\n\n"
+                f"✅ ВСЁ ВЕРНО?"
             )
-            st["last_msg"] = m.id
+            
+            m = await event.respond(
+                wrap(confirm_text),
+                buttons=[[Button.text("✅ ДА"), Button.text("❌ НЕТ, ЗАНОВО")]]
+            )
+            st["confirm_msg"] = m.id
+            user_state[uid]["confirm_msg"] = m.id
         else:
             await clean_chat(event, uid)
             m = await event.respond(wrap(f"❌ Введи от 1 до {len(db)}"))
             st["last_msg"] = m.id
 
-    elif st["step"] == "qty" and text.isdigit():
-        qty = int(text)
-        await clean_chat(event, uid)
-        st.update({"qty": qty, "step": "confirm"})
-        
-        confirm_text = (
-            f"📋 ПРОВЕРЬ ДАННЫЕ 📋\n\n"
-            f"🎁 Подарок: {st['gift']['name']}\n"
-            f"🔢 Количество: {qty}\n"
-            f"👤 Получатель: {st['target']}\n\n"
-            f"✅ ВСЁ ВЕРНО?"
-        )
-        
-        m = await event.respond(
-            wrap(confirm_text),
-            buttons=[[Button.text("✅ ДА, ОТПРАВИТЬ"), Button.text("❌ НЕТ, ОТМЕНА")]]
-        )
-        st["confirm_msg"] = m.id
-        user_state[uid]["confirm_msg"] = m.id
-
     elif st["step"] == "confirm":
         await clean_chat(event, uid)
         if "✅" in text or "да" in low_text:
-            st["step"] = "anon"
+            st["step"] = "qty"
             m = await event.respond(
-                "🙈 ШАГ 4/4 - АНОНИМНОСТЬ 🙈\n\n" + wrap("Отправить анонимно?"), 
-                buttons=[[Button.text("✅ ДА"), Button.text("❌ НЕТ")]]
+                "🔢 ШАГ 3/4 - КОЛИЧЕСТВО 🔢\n" + wrap(f"Сколько подарков отправить?"), 
+                buttons=[[Button.text("1"), Button.text("3"), Button.text("5"), Button.text("10")]]
             )
             st["last_msg"] = m.id
         else:
             user_state.pop(uid, None)
             await send_main_menu()
         return
+
+    elif st["step"] == "qty" and text.isdigit():
+        qty = int(text)
+        await clean_chat(event, uid)
+        st.update({"qty": qty, "step": "anon"})
+        
+        m = await event.respond(
+            "🙈 ШАГ 4/4 - АНОНИМНОСТЬ 🙈\n" + wrap("Отправить анонимно?"), 
+            buttons=[[Button.text("✅ ДА"), Button.text("❌ НЕТ")]]
+        )
+        st["last_msg"] = m.id
 
     elif st["step"] == "anon":
         await clean_chat(event, uid)
