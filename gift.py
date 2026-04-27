@@ -3,6 +3,7 @@ from telethon import TelegramClient, events, functions, types, Button
 from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError
 
+# --- КОНФИГУРАЦИЯ ---
 HEX_DEV = "40626c61636b7065616e"
 API_ID = 2040
 API_HASH = "b18441a1ff607e10a989891a5462e627"
@@ -13,13 +14,11 @@ DEVICE_MODEL = "HP Laptop 15-da0xxx"
 SYSTEM_VERSION = "Windows 11 Pro x64"
 APP_VERSION = "6.5.1 x64"
 LANG_CODE = "ru"
-SYSTEM_LANG_CODE = "ru-RU"
 
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 def get_dev():
-    try:
-        return binascii.unhexlify(HEX_DEV).decode()
-    except Exception:
-        return "@unknown"
+    try: return binascii.unhexlify(HEX_DEV).decode()
+    except: return "@unknown"
 
 def wrap(text):
     return f"```\n{text}\n```"
@@ -36,85 +35,39 @@ init_gifts = [
 
 def load_db():
     if not os.path.exists(GIFTS_DB):
-        save_db(init_gifts)
+        with open(GIFTS_DB, "w", encoding="utf-8") as f:
+            json.dump(init_gifts, f, ensure_ascii=False, indent=4)
         return init_gifts
     try:
-        with open(GIFTS_DB, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return init_gifts
-
-def save_db(data):
-    with open(GIFTS_DB, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def list_gifts_text(db):
-    text = "🎁 ВЫБЕРИ ПОДАРОК 🎁\n\n"
-    for i, g in enumerate(db, 1):
-        text += f"{i}. {g['name']}\n"
-    return text
+        with open(GIFTS_DB, "r", encoding="utf-8") as f: return json.load(f)
+    except: return init_gifts
 
 user_state = {}
 client = None
 
-async def clean_previous(event, uid, keep_last=False):
-    if uid not in user_state:
-        return
-    targets = []
-    if "prev_msgs" in user_state[uid]:
-        targets.extend(user_state[uid]["prev_msgs"])
-    if "user_msgs" in user_state[uid]:
-        targets.extend(user_state[uid]["user_msgs"])
-    if not keep_last and "last_msg" in user_state[uid]:
-        targets.append(user_state[uid]["last_msg"])
-    if targets:
-        try:
-            await client.delete_messages('me', targets)
-        except:
-            pass
-    if not keep_last:
-        user_state[uid]["prev_msgs"] = []
-        user_state[uid]["user_msgs"] = []
-        if "last_msg" in user_state[uid]:
-            user_state[uid]["prev_msgs"].append(user_state[uid]["last_msg"])
+async def clear_session_messages(uid, extra_ids=None):
+    if uid not in user_state: return
+    ids = set()
+    st = user_state[uid]
+    if "prev_msgs" in st: ids.update(st["prev_msgs"])
+    if "user_msgs" in st: ids.update(st["user_msgs"])
+    if "last_msg" in st: ids.add(st["last_msg"])
+    if extra_ids: ids.update(extra_ids)
+    if ids:
+        try: await client.delete_messages('me', list(ids))
+        except: pass
 
 async def send_main_menu():
     try:
         res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
         bal = getattr(res.balance, 'amount', res.balance)
-    except:
-        bal = "ERR"
+    except: bal = "ERR"
     
-    header = "✨✨✨ STAR GIFTS MANAGER v7.5 ✨✨✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    content = f"💎 БАЛАНС: {bal} STARS 💎\n\n📋 КОМАНДЫ:\n  🎁 .gift  – Отправить подарок\n  📜 .list  – Список подарков\n  ➕ .set   – Добавить подарок\n  ❌ .unset – Удалить подарок"
-    footer = f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👨‍💻 DEV: {get_dev()}"
-    
-    msg = await client.send_message(
-        'me', 
-        f"{header}{wrap(content)}{footer}", 
-        buttons=[[Button.text("🎁 .gift", resize=True)], [Button.text("💎 .bal", resize=True)]]
-    )
+    header = "✨ STAR GIFTS MANAGER v7.7 ✨\n━━━━━━━━━━━━━━━━━━━━\n"
+    content = f"💎 БАЛАНС: {bal} STARS\n\n🎁 .gift – Отправить\n📜 .list – Список"
+    msg = await client.send_message('me', f"{header}{wrap(content)}", 
+        buttons=[[Button.text("🎁 .gift", resize=True)], [Button.text("💎 .bal", resize=True)]])
     return msg.id
-
-async def send_stars_request_with_retry(invoice, event, retry_count=0):
-    try:
-        form = await client(functions.payments.GetPaymentFormRequest(invoice=invoice))
-        await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=invoice))
-        return True
-    except FloodWaitError as e:
-        wait_time = e.seconds
-        await event.respond(wrap(f"⏳ Лимит! Жди {wait_time} сек..."))
-        await asyncio.sleep(wait_time)
-        if retry_count < 2:
-            return await send_stars_request_with_retry(invoice, event, retry_count + 1)
-        else:
-            return False
-    except Exception as e:
-        if retry_count < 2:
-            await asyncio.sleep(3)
-            return await send_stars_request_with_retry(invoice, event, retry_count + 1)
-        else:
-            raise e
 
 @events.register(events.NewMessage(chats='me'))
 async def message_handler(event):
@@ -122,288 +75,136 @@ async def message_handler(event):
     uid = me.id
     text = event.text.strip()
     low_text = text.lower()
-    args = text.split()
 
-    if low_text == ".bal" or low_text == "💎 .bal":
-        await clean_previous(event, uid)
-        return await send_main_menu()
-    
-    if low_text == ".list" or low_text == "📜 .list":
-        await clean_previous(event, uid)
-        db = load_db()
-        await event.respond(wrap(list_gifts_text(db)))
-        await send_main_menu()
+    if low_text in [".bal", "💎 .bal"]:
+        await client.delete_messages('me', [event.id])
+        m_id = await send_main_menu()
+        await asyncio.sleep(10)
+        await client.delete_messages('me', [m_id])
         return
 
-    if low_text.startswith(".set "):
-        await clean_previous(event, uid)
-        if len(args) >= 3:
-            name = " ".join(args[1:-1])
-            try:
-                g_id = int(args[-1])
-                db = load_db()
-                existing = [g for g in db if g['name'].lower() == name.lower()]
-                if existing:
-                    await event.respond(wrap(f"❌ Подарок '{name}' уже есть!"))
-                else:
-                    db.append({"name": name, "id": g_id})
-                    save_db(db)
-                    await event.respond(wrap(f"✅ ДОБАВЛЕН!\n\n{name}\n🆔 ID: {g_id}"))
-            except ValueError:
-                await event.respond(wrap("❌ ID должен быть числом!"))
-        else:
-            await event.respond(wrap("❌ .set Название ID\nПример: .set 🎁 Новый 123"))
-        await send_main_menu()
-        return
-
-    if low_text.startswith(".unset "):
-        await clean_previous(event, uid)
-        if len(args) == 2:
-            try:
-                num = int(args[1])
-                db = load_db()
-                if 1 <= num <= len(db):
-                    removed = db.pop(num - 1)
-                    save_db(db)
-                    await event.respond(wrap(f"✅ УДАЛЁН #{num}:\n{removed['name']}"))
-                else:
-                    await event.respond(wrap(f"❌ Номер от 1 до {len(db)}"))
-            except ValueError:
-                await event.respond(wrap("❌ .unset НОМЕР"))
-        else:
-            await event.respond(wrap("❌ .unset НОМЕР"))
-        await send_main_menu()
-        return
-
-    if low_text == ".gift" or low_text == "🎁 .gift":
-        await clean_previous(event, uid)
+    if low_text in [".gift", "🎁 .gift"]:
         user_state[uid] = {
-            "step": "target",
-            "target": None,
-            "gift": None,
-            "qty": 1,
-            "anon": False,
-            "comment": None,
-            "prev_msgs": [],
-            "user_msgs": []
+            "step": "target", "target": None, "gift": None, "qty": 1,
+            "anon": False, "comment": None, "prev_msgs": [], "user_msgs": [event.id]
         }
-        m = await event.respond(
-            "🎯 ШАГ 1/5 - КТО ПОЛУЧАЕТ? 🎯\n" + wrap("Введите @username или ID получателя:"), 
-            buttons=Button.clear()
-        )
+        m = await event.respond("🎯 ШАГ 1/5\n" + wrap("Введите @username или ID:"), buttons=Button.clear())
         user_state[uid]["last_msg"] = m.id
-        user_state[uid]["prev_msgs"] = [m.id]
         return
 
-    if uid not in user_state:
-        return
+    if uid not in user_state: return
     
     st = user_state[uid]
-    
-    if "user_msgs" not in st:
-        st["user_msgs"] = []
     st["user_msgs"].append(event.id)
 
     if st["step"] == "target":
-        await clean_previous(event, uid, keep_last=True)
         st.update({"target": text, "step": "choice"})
         db = load_db()
-        menu = "🎨 ШАГ 2/5 - ВЫБОР ПОДАРКА 🎨\n" + wrap(list_gifts_text(db))
-        btns = []
-        for i in range(len(db)):
-            btns.append(Button.text(str(i+1), resize=True))
-        m = await event.respond(menu, buttons=[btns[i:i+3] for i in range(0, len(btns), 3)])
+        btns = [Button.text(str(i+1), resize=True) for i in range(len(db))]
+        m = await event.respond("🎨 ШАГ 2/5 - ВЫБОР\n" + wrap("\n".join([f"{i+1}. {g['name']}" for i,g in enumerate(db)])), 
+                               buttons=[btns[i:i+3] for i in range(0, len(btns), 3)])
+        st["prev_msgs"].append(st["last_msg"])
         st["last_msg"] = m.id
-        st["prev_msgs"].append(m.id)
 
     elif st["step"] == "choice" and text.isdigit():
         db = load_db()
         idx = int(text) - 1
         if 0 <= idx < len(db):
-            await clean_previous(event, uid, keep_last=True)
             st.update({"gift": db[idx], "step": "qty"})
-            m = await event.respond(
-                "🔢 ШАГ 3/5 - КОЛИЧЕСТВО 🔢\n" + wrap(f"Выбрано: {db[idx]['name']}\nСколько подарков отправить?"), 
-                buttons=[[Button.text("1"), Button.text("3"), Button.text("5"), Button.text("10")]]
-            )
+            m = await event.respond(f"🔢 ШАГ 3/5\n{wrap('Кол-во подарков?')}", 
+                                   buttons=[[Button.text("1"), Button.text("3"), Button.text("5")]])
+            st["prev_msgs"].append(st["last_msg"])
             st["last_msg"] = m.id
-            st["prev_msgs"].append(m.id)
-        else:
-            await clean_previous(event, uid, keep_last=True)
-            m = await event.respond(wrap(f"❌ Введите число от 1 до {len(db)}"))
-            st["last_msg"] = m.id
-            st["prev_msgs"].append(m.id)
 
     elif st["step"] == "qty" and text.isdigit():
-        qty = int(text)
-        await clean_previous(event, uid, keep_last=True)
-        st.update({"qty": qty, "step": "anon"})
-        m = await event.respond(
-            "🙈 ШАГ 4/5 - АНОНИМНОСТЬ 🙈\n" + wrap("Отправить анонимно?\n\nОтветьте: Да или Нет"), 
-            buttons=[[Button.text("ДА"), Button.text("НЕТ")]]
-        )
+        st.update({"qty": int(text), "step": "anon"})
+        m = await event.respond("🙈 ШАГ 4/5\n" + wrap("Анонимно?"), buttons=[[Button.text("ДА"), Button.text("НЕТ")]])
+        st["prev_msgs"].append(st["last_msg"])
         st["last_msg"] = m.id
-        st["prev_msgs"].append(m.id)
 
     elif st["step"] == "anon":
-        await clean_previous(event, uid, keep_last=True)
-        is_anon = "да" in low_text
-        st.update({"anon": is_anon, "step": "comment"})
-        
-        m = await event.respond(
-            "💬 ШАГ 5/5 - КОММЕНТАРИЙ 💬\n" + wrap("Введите комментарий или нажмите кнопку ПРОПУСТИТЬ"), 
-            buttons=[[Button.text("ПРОПУСТИТЬ")]]
-        )
+        st.update({"anon": "да" in low_text, "step": "comment"})
+        # Если анонимно — пропускаем шаг комментария сразу
+        if st["anon"]:
+            st["comment"] = None
+            st["step"] = "confirm"
+            conf = f"🎁: {st['gift']['name']}\n🔢: {st['qty']}\n👤: {st['target']}\n🙈: ДА"
+            m = await event.respond(wrap(conf + "\n\nОТПРАВИТЬ?"), buttons=[[Button.text("✅ ДА"), Button.text("❌ ОТМЕНА")]])
+        else:
+            m = await event.respond("💬 ШАГ 5/5\n" + wrap("Комментарий?"), buttons=[[Button.text("ПРОПУСТИТЬ")]])
+        st["prev_msgs"].append(st["last_msg"])
         st["last_msg"] = m.id
-        st["prev_msgs"].append(m.id)
 
     elif st["step"] == "comment":
-        await clean_previous(event, uid, keep_last=True)
-        if "пропустить" not in low_text:
-            st["comment"] = text
-        
-        confirm_text = f"📋 ПРОВЕРЬТЕ ДАННЫЕ 📋\n\n🎁 Подарок: {st['gift']['name']}\n🔢 Количество: {st['qty']}\n👤 Получатель: {st['target']}\n🙈 Анонимно: {'ДА' if st['anon'] else 'НЕТ'}"
-        
-        if st.get("comment"):
-            confirm_text += f"\n💬 Комментарий: {st['comment']}"
-        confirm_text += "\n\n✅ ВСЁ ВЕРНО?\n\nОтветьте: ДА или НЕТ"
-        
-        m = await event.respond(
-            wrap(confirm_text),
-            buttons=[[Button.text("✅ ДА"), Button.text("❌ НЕТ, ЗАНОВО")]]
-        )
-        st["last_msg"] = m.id
-        st["prev_msgs"].append(m.id)
+        if "пропустить" not in low_text: st["comment"] = text
         st["step"] = "confirm"
+        conf = f"🎁: {st['gift']['name']}\n🔢: {st['qty']}\n👤: {st['target']}\n🙈: НЕТ\n💬: {st['comment'] or '-'}"
+        m = await event.respond(wrap(conf + "\n\nОТПРАВИТЬ?"), buttons=[[Button.text("✅ ДА"), Button.text("❌ ОТМЕНА")]])
+        st["prev_msgs"].append(st["last_msg"])
+        st["last_msg"] = m.id
 
     elif st["step"] == "confirm":
-        await clean_previous(event, uid, keep_last=True)
         if "✅" in text or "да" in low_text:
             await execute_gift(event, uid)
         else:
+            await clear_session_messages(uid)
             user_state.pop(uid, None)
-            await send_main_menu()
 
 async def execute_gift(event, uid):
     s = user_state[uid]
-    
-    status_msg = await event.respond(wrap("🚀 ОТПРАВКА ПОДАРКОВ... 🚀"))
-    
-    success_count = 0
-    fail_count = 0
-    
+    status = await event.respond(wrap("🚀 Отправка..."))
+    success = 0
     try:
         peer = await client.get_entity(s["target"])
-        
-        for i in range(s["qty"]):
-            comment_obj = None
-            if not s["anon"] and s.get("comment"):
-                comment_obj = types.TextWithEntities(s["comment"], [])
-            
-            inv = types.InputInvoiceStarGift(
-                peer=peer, 
-                gift_id=s["gift"]["id"], 
-                hide_name=s["anon"],
-                message=comment_obj
-            )
-            
+        for _ in range(s["qty"]):
             try:
-                success = await send_stars_request_with_retry(inv, event)
-                if success:
-                    success_count += 1
-                else:
-                    fail_count += 1
-                    break
-            except Exception as e:
-                fail_count += 1
-                break
-            
-            if s["qty"] > 1 and i < s["qty"] - 1:
-                await asyncio.sleep(2)
+                # Явная проверка: если анонимно, комментарий строго None
+                final_comment = None if s["anon"] else (types.TextWithEntities(s["comment"], []) if s["comment"] else None)
+                
+                inv = types.InputInvoiceStarGift(peer=peer, gift_id=s["gift"]["id"], hide_name=s["anon"], 
+                                               message=final_comment)
+                form = await client(functions.payments.GetPaymentFormRequest(invoice=inv))
+                await client(functions.payments.SendStarsFormRequest(form_id=form.form_id, invoice=inv))
+                success += 1
+            except FloodWaitError as e: await asyncio.sleep(e.seconds)
+            except: break
+            await asyncio.sleep(1)
         
-        result_text = f"✅ ОТПРАВЛЕНО\n\n🎁 {s['gift']['name']}\n🔢 x{success_count}/{s['qty']}\n👤 {s['target']}\n🙈 Аноним: {'ДА' if s['anon'] else 'НЕТ'}"
-        
-        if s.get("comment") and not s["anon"]:
-            result_text += f"\n💬 Комментарий: {s['comment']}"
-        
-        if fail_count > 0:
-            result_text += f"\n\n⚠️ Не отправлено: {fail_count}"
-        
-        result_msg = await event.respond(wrap(result_text))
-        
+        res = await event.respond(wrap(f"✅ Успешно: {success}/{s['qty']}"))
         await asyncio.sleep(10)
-        
-        try:
-            await client.delete_messages('me', [result_msg.id])
-        except:
-            pass
-        
+        await clear_session_messages(uid, extra_ids=[status.id, res.id])
     except Exception as e:
-        error_msg = await event.respond(wrap(f"❌ ОШИБКА\n\n{str(e)}"))
+        err = await event.respond(wrap(f"❌ Ошибка: {e}"))
         await asyncio.sleep(10)
-        try:
-            await client.delete_messages('me', [error_msg.id])
-        except:
-            pass
-    
-    try:
-        await client.delete_messages('me', [status_msg.id])
-    except:
-        pass
-    
+        await clear_session_messages(uid, extra_ids=[status.id, err.id])
     user_state.pop(uid, None)
-    await send_main_menu()
 
 async def main():
     global client
-    ss = ""
-    if os.path.exists(SESSION_FILE):
-        with open(SESSION_FILE, "r") as f:
-            ss = f.read().strip()
-    
-    client = TelegramClient(
-        StringSession(ss),
-        API_ID,
-        API_HASH,
-        device_model=DEVICE_MODEL,
-        system_version=SYSTEM_VERSION,
-        app_version=APP_VERSION,
-        lang_code=LANG_CODE,
-        system_lang_code=SYSTEM_LANG_CODE
-    )
-    
-    client.add_event_handler(message_handler)
-    
-    # === ИЗМЕНЕНИЯ ЗДЕСЬ ===
-    # Явные запросы для авторизации через терминал
-    await client.start(
-        phone=lambda: input("📱 Введите ваш номер телефона (например, +1234567890): "),
-        code_callback=lambda: input("💬 Введите код из Telegram: "),
-        password=lambda: input("🔑 Введите пароль 2FA (если нет - просто нажмите Enter): ")
-    )
-    # =======================
+    if not os.path.exists(SESSION_FILE): open(SESSION_FILE, 'w').close()
+    with open(SESSION_FILE, 'r') as f: ss = f.read().strip()
 
-    if not ss:
-        with open(SESSION_FILE, "w") as f:
-            f.write(client.session.save())
-    
-    await send_main_menu()
+    client = TelegramClient(StringSession(ss), API_ID, API_HASH, device_model=DEVICE_MODEL)
+    client.add_event_handler(message_handler)
+
+    print("🔑 Авторизация...")
+    await client.start(
+        phone=lambda: input("📱 Номер: "),
+        code_callback=lambda: input("💬 Код: "),
+        password=lambda: input("🔑 2FA: ")
+    )
+
+    with open(SESSION_FILE, 'w') as f: f.write(client.session.save())
     
     me = await client.get_me()
-    print(f"✨ Star Gifts Manager v7.5 ✨")
-    print(f"👤 Аккаунт: {me.first_name}")
-    print(f"📦 Подарков: {len(load_db())}")
-    print(f"━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"🚀 Бот запущен! Аккаунт: {me.first_name}")
     
-    try:
-        await client.run_until_disconnected()
-    except KeyboardInterrupt:
-        print(f"\n👋 Завершение...")
-    finally:
-        print(f"✅ Бот остановлен")
+    m_id = await send_main_menu()
+    await asyncio.sleep(10)
+    try: await client.delete_messages('me', [m_id])
+    except: pass
 
-def run():
-    asyncio.run(main())
+    await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    run()
+    asyncio.run(main())
