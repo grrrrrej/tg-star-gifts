@@ -12,7 +12,7 @@ GIFTS_DB_FILE = "gifts_base.json"
 
 DEVICE_MODEL = "HP Laptop 15-da0xxx"
 SYSTEM_VERSION = "Windows 11 Pro x64"
-APP_VERSION = "7.9.5"
+APP_VERSION = "7.9.6"
 
 def get_dev():
     try: return binascii.unhexlify(HEX_DEV).decode()
@@ -25,10 +25,17 @@ def load_gifts():
         init = [{"name": "🎄 Елка", "id": 5922558454332916696, "price": 50}]
         save_gifts(init)
         return init
-    with open(GIFTS_DB_FILE, "r", encoding="utf-8") as f: return json.load(f)
+    with open(GIFTS_DB_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        # Проверка на наличие ключа price, чтобы не было ошибки KeyError
+        for item in data:
+            if "price" not in item:
+                item["price"] = 50
+        return data
 
 def save_gifts(data):
-    with open(GIFTS_DB_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=4)
+    with open(GIFTS_DB_FILE, "w", encoding="utf-8") as f: 
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 user_state = {}
 client = None
@@ -48,10 +55,11 @@ async def final_cleanup(uid, delay=10):
     if uid in user_state:
         st = user_state[uid]
         ids = st.get("to_delete", [])
-        # Удаляем и сообщение с процессом, и саму таблицу меню, и ответы юзера
         try: await client.delete_messages('me', ids)
         except: pass
         user_state.pop(uid, None)
+        # Отправляем новую чистую таблицу после завершения
+        await client.send_message('me', await get_menu_text())
 
 @events.register(events.NewMessage(chats='me'))
 async def handler(event):
@@ -61,10 +69,7 @@ async def handler(event):
 
     if low == ".bal":
         await event.delete()
-        m = await event.respond(await get_menu_text())
-        # Запоминаем ID новой таблицы, чтобы удалить её позже если нужно
-        if uid not in user_state: user_state[uid] = {"to_delete": []}
-        user_state[uid]["to_delete"].append(m.id)
+        await client.send_message('me', await get_menu_text())
         return
 
     if low.startswith(".set "):
@@ -74,27 +79,20 @@ async def handler(event):
             db = load_gifts()
             db.append({"name": p[0].strip(), "id": int(p[1].strip()), "price": int(p[2].strip())})
             save_gifts(db)
-            await event.respond(f"✅ Добавлено: `{p[0].strip()}`")
-        except: await event.respond("❗ Ошибка формата")
+            await event.respond(f"✅ Добавлено: `{p[0].strip()}`", delete_after=5)
+        except: await event.respond("❗ Ошибка формата", delete_after=5)
         return
 
     if low == ".gift":
-        # Находим последнее сообщение с таблицей (меню) перед запуском
-        msgs = await client.get_messages('me', limit=5)
         menu_id = None
-        for msg in msgs:
-            if "STAR GIFTS MANAGER" in (msg.text or ""):
+        async for msg in client.iter_messages('me', limit=10):
+            if msg.text and "STAR GIFTS MANAGER" in msg.text:
                 menu_id = msg.id
                 break
         
         await event.delete()
         m = await event.respond("🎯 **ШАГ 1/5**\n" + wrap("Введите @username или ID получателя:"))
-        
-        user_state[uid] = {
-            "step": "target", 
-            "main_msg": m, 
-            "to_delete": [m.id]
-        }
+        user_state[uid] = {"step": "target", "main_msg": m, "to_delete": [m.id]}
         if menu_id: user_state[uid]["to_delete"].append(menu_id)
         return
 
@@ -109,7 +107,7 @@ async def handler(event):
             st["target"] = text
             st["step"] = "choice"
             db = load_gifts()
-            list_txt = "\n".join([f"{i+1}. {g['name']} ({g['price']}⭐)" for i, g in enumerate(db)])
+            list_txt = "\n".join([f"{i+1}. {g['name']} ({g.get('price', 50)}⭐)" for i, g in enumerate(db)])
             await main_msg.edit(f"🎨 **ШАГ 2/5 - ВЫБОР**\n{wrap(list_txt)}\n**Введите номер:**")
 
         elif st["step"] == "choice":
@@ -120,7 +118,7 @@ async def handler(event):
             if 0 <= idx < len(db):
                 st["gift"] = db[idx]
                 st["step"] = "qty"
-                await main_msg.edit(f"🔢 **ШАГ 3/5**\n{wrap('Введите число: сколько штук отправить?')}")
+                await main_msg.edit(f"🔢 **ШАГ 3/5: КОЛИЧЕСТВО**\n{wrap('Введите число: сколько штук отправить?')}")
             else: await main_msg.edit(f"❗ **Нет такого номера!**")
 
         elif st["step"] == "qty":
@@ -150,13 +148,13 @@ async def handler(event):
             else:
                 await main_msg.edit("❌ **Отмена.**")
                 asyncio.create_task(final_cleanup(uid, 3))
-
     except Exception as e:
         await main_msg.edit(f"❌ **Ошибка:** {e}")
         asyncio.create_task(final_cleanup(uid, 5))
 
 async def finish_setup(msg, st):
-    total = st["gift"]["price"] * st["qty"]
+    price = st["gift"].get("price", 50)
+    total = price * st["qty"]
     header = "✨✨✨ STAR GIFTS MANAGER v4.3.0 ✨✨✨\n"
     res = (f"📋 ИТОГ:\n🎁 {st['gift']['name']}\n👤 {st['target']}\n"
            f"🔢 {st['qty']} шт.\n🙈 Анон: {'ДА' if st['anon'] else 'НЕТ'}\n"
@@ -189,6 +187,11 @@ async def execute_send(main_msg, uid):
         await main_msg.edit(err_text or "❌ Сбой.")
     asyncio.create_task(final_cleanup(uid, 10))
 
+async def startup_menu():
+    # Функция для отправки меню при запуске
+    m_text = await get_menu_text()
+    await client.send_message('me', m_text)
+
 def run():
     global client
     if not os.path.exists(SESSION_FILE): open(SESSION_FILE, 'w').close()
@@ -196,8 +199,14 @@ def run():
     client = TelegramClient(StringSession(ss), API_ID, API_HASH, device_model=DEVICE_MODEL, system_version=SYSTEM_VERSION, app_version=APP_VERSION)
     client.add_event_handler(handler)
     client.start()
-    print("🚀 Бот запущен!")
-    client.loop.run_until_complete(client.send_message('me', "✨ Скрипт готов. Введите `.bal` для меню."))
+    
+    print("\n" + "="*30)
+    print("🚀 БОТ ЗАПУЩЕН!")
+    print("👉 ТАБЛИЦА ОТПРАВЛЕНА В ИЗБРАННОЕ")
+    print("="*30 + "\n")
+    
+    # Сразу запускаем отправку таблицы в Telegram
+    client.loop.run_until_complete(startup_menu())
     client.run_until_disconnected()
 
 if __name__ == "__main__":
